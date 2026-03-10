@@ -1,28 +1,37 @@
 import Image from "next/image";
 import Link from "next/link";
-import { MOCK_PRODUCTS } from "@/data/products";
+import { productService } from "@/services/productService";
 
-export default function Home() {
-  const justDroppedProducts = MOCK_PRODUCTS.slice(0, 4);
+export default async function Home() {
+  const products = await productService.getAllProducts();
+  const banners = await productService.getMarketingAssets('banner_home');
+
+  const justDroppedProducts = products.slice(0, 4);
+  const heroBanner = banners[0] || {
+    image_url: "https://lh3.googleusercontent.com/aida-public/AB6AXuDa_ZarHO-Uxcx1X6FtcqkINGYFcF4s3jqrwow9TkiDgFYShi7zFlbJ2hnnQ7kZYK_S43Xu5n-KPubxDsYNqHPLEB8R8ijXCx33Sg8mES5FfwwFUakU_sKe9inQTT6PTfJ4ksu7ve_NOaEmg1_JZ4YxT0lzMxSvrcw-_nGLTFJ-1ifV2DRmayaZApkca7y23HjSSIbRNG46TvEsgC4xrv18EvoN_lY6JATH9O1TIPXvsj8GQs2DMk2HepfxqPvwOrGjA6Trm0b3_0XH",
+    title: "Define Your Movement",
+    description: "The new ultra-modern collection by Tahi Cruz. Designed for performance, engineered for elegance."
+  };
 
   return (
     <>
-      {/* Hero Section */}
+      {/* Hero Section - DYNAMIC from Supabase */}
       <section className="relative h-[85vh] w-full overflow-hidden">
         <Image
-          src="https://lh3.googleusercontent.com/aida-public/AB6AXuDa_ZarHO-Uxcx1X6FtcqkINGYFcF4s3jqrwow9TkiDgFYShi7zFlbJ2hnnQ7kZYK_S43Xu5n-KPubxDsYNqHPLEB8R8ijXCx33Sg8mES5FfwwFUakU_sKe9inQTT6PTfJ4ksu7ve_NOaEmg1_JZ4YxT0lzMxSvrcw-_nGLTFJ-1ifV2DRmayaZApkca7y23HjSSIbRNG46TvEsgC4xrv18EvoN_lY6JATH9O1TIPXvsj8GQs2DMk2HepfxqPvwOrGjA6Trm0b3_0XH"
-          alt="Tahi Cruz in Fenix Fit activewear"
+          src={heroBanner.image_url}
+          alt={heroBanner.title || "Tahi Cruz in Fenix Fit activewear"}
           fill
           className="object-cover object-center"
           priority
         />
         <div className="absolute inset-0 bg-black/20"></div>
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
-          <h1 className="font-display text-5xl md:text-7xl lg:text-8xl text-white font-bold mb-6 tracking-tight drop-shadow-xl">
-            Define Your<br /><span className="italic font-light">Movement</span>
+          <h1 className="font-display text-5xl md:text-7xl lg:text-8xl text-white font-bold mb-6 tracking-tight drop-shadow-xl uppercase italic">
+            {heroBanner.title?.split(' ').slice(0, 2).join(' ')}<br />
+            <span className="italic font-light">{heroBanner.title?.split(' ').slice(2).join(' ')}</span>
           </h1>
           <p className="text-white/90 text-lg md:text-xl mb-10 max-w-2xl font-light drop-shadow-lg">
-            The new ultra-modern collection by Tahi Cruz. Designed for performance, engineered for elegance.
+            {heroBanner.description}
           </p>
           <Link href="/collections" className="inline-block bg-white text-primary px-10 py-4 text-[11px] font-bold tracking-[0.2em] uppercase hover:bg-black hover:text-white transition-all shadow-xl">
             Shop New Arrivals
@@ -30,7 +39,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Just Dropped Section */}
+      {/* Just Dropped Section - DYNAMIC from Supabase */}
       <section className="py-24 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-end mb-16">
           <div>
@@ -46,25 +55,38 @@ export default function Home() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-16">
           {justDroppedProducts.map((product) => {
             const variant = product.variants[0];
+            const isHotSale = product.original_price && product.original_price > product.price;
+            const isLastUnits = product.stock < 10;
+
             return (
               <div key={product.id} className="group relative">
                 <div className="relative w-full aspect-[3/4] overflow-hidden bg-gray-50 mb-6">
-                  <Image
-                    src={variant.mainImage}
-                    alt={product.name}
-                    fill
-                    className="object-cover object-center transition-transform duration-1000 group-hover:scale-110"
-                  />
+                  {variant && (
+                    <Image
+                      src={variant.main_image}
+                      alt={product.name}
+                      fill
+                      className="object-cover object-center transition-transform duration-1000 group-hover:scale-110"
+                    />
+                  )}
                   <div className="absolute inset-x-0 bottom-0 p-4 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 transition-all duration-500">
                     <button className="w-full bg-white text-primary py-4 text-[10px] font-bold tracking-[0.2em] uppercase shadow-[0_15px_30px_rgba(0,0,0,0.1)] hover:bg-black hover:text-white transition-all">
                       Quick Add
                     </button>
                   </div>
-                  {product.badges && product.badges.map((badge, idx) => (
-                    <div key={idx} className="absolute top-6 left-6">
-                      <span className="bg-primary text-white text-[9px] font-black px-2.5 py-1.5 uppercase tracking-widest">{badge}</span>
-                    </div>
-                  ))}
+
+                  {/* DYNAMIC BADGES */}
+                  <div className="absolute top-6 left-6 flex flex-col space-y-2">
+                    {product.badges && product.badges.map((badge, idx) => (
+                      <span key={idx} className="bg-primary text-white text-[9px] font-black px-2.5 py-1.5 uppercase tracking-widest self-start">{badge}</span>
+                    ))}
+                    {isHotSale && (
+                      <span className="bg-red-600 text-white text-[9px] font-black px-2.5 py-1.5 uppercase tracking-widest self-start">Hot Sale</span>
+                    )}
+                    {isLastUnits && !isHotSale && (
+                      <span className="bg-orange-600 text-white text-[9px] font-black px-2.5 py-1.5 uppercase tracking-widest self-start">Last Units</span>
+                    )}
+                  </div>
                 </div>
                 <div className="flex flex-col space-y-1">
                   <h3 className="text-[14px] font-bold tracking-tight">
@@ -73,8 +95,13 @@ export default function Home() {
                     </Link>
                   </h3>
                   <div className="flex justify-between items-center pt-1">
-                    <p className="text-[12px] text-muted-light font-medium">{variant.colorName}</p>
-                    <p className="text-[14px] font-black font-display">${product.price}</p>
+                    <p className="text-[12px] text-muted-light font-medium">{variant?.color_name}</p>
+                    <div className="text-right">
+                      <p className={`text-[14px] font-black font-display ${isHotSale ? 'text-red-600' : 'text-primary'}`}>${product.price}</p>
+                      {isHotSale && (
+                        <p className="text-[10px] text-gray-400 line-through font-bold">${product.original_price}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -94,7 +121,7 @@ export default function Home() {
         <div className="relative rounded-3xl overflow-hidden bg-gray-900 h-[70vh] flex items-center shadow-2xl">
           <Image
             src="https://lh3.googleusercontent.com/aida-public/AB6AXuDUcXu3bTR9MFEjzbnBUzmNIUk2sWDjXQkWWbx2-YKErkXgD_Axc5ARBmQHUnEhesnbZAah68Sc2OURdpXmKOtryIA0-fy1X-G07xU5iENV57bcf9aoJgLdtA0fytDWlUerHk0o2uHkLVsulZX80cXVogACb4D49vFS8FGAuQh0w3F2lok9iAy8kB5EoMPFAevH_mHbXBW7B6xQSEOrlVkdhASX6n9GnTilqpP5uO9U-RpopUS6hyFYUpoo1dmwc1BR7-TRGwEjRCKk"
-            alt="Woman working out"
+            alt="Sustainable Luxury"
             fill
             className="object-cover opacity-70 mix-blend-overlay"
           />

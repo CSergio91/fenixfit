@@ -8,20 +8,48 @@ import { useRouter } from "next/navigation";
 
 export function CartDrawer() {
     const { isOpen, setIsOpen, items, updateQuantity, removeItem, getCartTotal, clearCart } = useCartStore();
+    const [email, setEmail] = useState('');
+    const [isCheckingOut, setIsCheckingOut] = useState(false);
     const [isMounted, setIsMounted] = useState(false);
     const router = useRouter();
 
     useEffect(() => {
-        // eslint-disable-next-line
         setIsMounted(true);
     }, []);
 
     if (!isMounted) return null;
 
-    const handleCheckout = () => {
-        clearCart();
-        setIsOpen(false);
-        router.push("/checkout/success");
+    const handleCheckout = async () => {
+        if (!email || !email.includes('@')) {
+            alert('Por favor, ingresa un email válido para recibir tu confirmación.');
+            return;
+        }
+
+        setIsCheckingOut(true);
+        try {
+            // Get UTMs from URL if present
+            const urlParams = new URLSearchParams(window.location.search);
+            const utmParams = {
+                source: urlParams.get('utm_source'),
+                medium: urlParams.get('utm_medium'),
+                campaign: urlParams.get('utm_campaign'),
+            };
+
+            const response = await fetch('/api/checkout', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items, customerEmail: email, utmParams }),
+            });
+
+            const { url, error } = await response.json();
+            if (error) throw new Error(error);
+
+            // Redirect to Stripe
+            window.location.href = url;
+        } catch (err: any) {
+            alert('Error al iniciar el pago: ' + err.message);
+            setIsCheckingOut(false);
+        }
     };
 
     return (
@@ -40,7 +68,7 @@ export function CartDrawer() {
             >
                 <div className="flex items-center justify-between p-8 border-b border-gray-100">
                     <div className="flex items-center space-x-3">
-                        <h2 className="font-display text-2xl font-bold tracking-tight">Your Bag</h2>
+                        <h2 className="font-display text-2xl font-bold tracking-tight">Tu Bolsa</h2>
                         <span className="bg-gray-100 text-[11px] font-bold px-2 py-0.5 rounded-full">{items.length}</span>
                     </div>
                     <button
@@ -57,8 +85,8 @@ export function CartDrawer() {
                             <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mb-6">
                                 <span className="material-icons text-3xl text-gray-300">shopping_bag</span>
                             </div>
-                            <p className="text-lg font-bold mb-2">Your bag is empty.</p>
-                            <p className="text-muted-light text-sm mb-10 max-w-[240px]">Seems like you haven&apos;t found your next workout essential yet.</p>
+                            <p className="text-lg font-bold mb-2">Tu bolsa está vacía.</p>
+                            <p className="text-muted-light text-sm mb-10 max-w-[240px]">Parece que aún no has encontrado tu conjunto ideal.</p>
                             <button
                                 onClick={() => {
                                     setIsOpen(false);
@@ -66,7 +94,7 @@ export function CartDrawer() {
                                 }}
                                 className="bg-primary text-white text-xs font-bold uppercase tracking-widest px-10 py-4 hover:bg-gray-900 transition-all shadow-lg"
                             >
-                                Start Shopping
+                                Empezar a Comprar
                             </button>
                         </div>
                     ) : (
@@ -75,7 +103,7 @@ export function CartDrawer() {
                                 <li key={item.id} className="flex space-x-6">
                                     <div className="relative w-24 h-32 flex-shrink-0 bg-gray-50 overflow-hidden">
                                         <Image
-                                            src={item.variant.mainImage}
+                                            src={item.variant.main_image || item.variant.mainImage}
                                             alt={item.product.name}
                                             fill
                                             className="object-cover"
@@ -92,7 +120,7 @@ export function CartDrawer() {
                                                 <p className="text-[13px] font-bold font-display">${item.product.price}</p>
                                             </div>
                                             <div className="flex items-center space-x-3 text-[11px] text-muted-light uppercase tracking-wider font-semibold">
-                                                <span>{item.variant.colorName}</span>
+                                                <span>{item.variant.color_name || item.variant.colorName}</span>
                                                 <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
                                                 <span>Size {item.size}</span>
                                             </div>
@@ -117,7 +145,7 @@ export function CartDrawer() {
                                                 onClick={() => removeItem(item.id)}
                                                 className="text-[10px] font-bold uppercase tracking-widest text-muted-light hover:text-red-500 transition-colors flex items-center"
                                             >
-                                                <span>Remove</span>
+                                                <span>Eliminar</span>
                                             </button>
                                         </div>
                                     </div>
@@ -128,19 +156,32 @@ export function CartDrawer() {
                 </div>
 
                 {items.length > 0 && (
-                    <div className="border-t border-gray-100 p-8 bg-white">
-                        <div className="flex justify-between items-center mb-6">
-                            <span className="text-xs font-bold uppercase tracking-[0.2em]">Subtotal</span>
-                            <span className="text-2xl font-black font-display">${getCartTotal()}</span>
+                    <div className="border-t border-gray-100 p-8 bg-white border-b-0 space-y-6">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-primary ml-1">Email para Confirmación</label>
+                            <input
+                                type="email"
+                                placeholder="invitado@ejemplo.com"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
+                                className="w-full bg-gray-50 border-0 rounded-2xl p-4 text-xs focus:ring-2 focus:ring-primary transition-all"
+                            />
                         </div>
-                        <p className="text-[11px] text-muted-light mb-8 leading-relaxed font-medium">Shipping and taxes calculated at checkout. Free shipping on orders over $150.</p>
+
+                        <div className="flex justify-between items-center px-1">
+                            <span className="text-xs font-bold uppercase tracking-[0.2em]">Subtotal</span>
+                            <span className="text-2xl font-black font-display font-black tracking-tighter">${getCartTotal()}</span>
+                        </div>
+
                         <button
                             onClick={handleCheckout}
-                            className="w-full bg-primary text-white py-5 text-xs font-bold uppercase tracking-[0.2em] hover:bg-gray-900 transition-all shadow-xl flex justify-between items-center px-8"
+                            disabled={isCheckingOut}
+                            className={`w-full bg-primary text-white py-5 text-xs font-bold uppercase tracking-[0.2em] hover:bg-gray-900 transition-all shadow-xl flex justify-between items-center px-8 relative overflow-hidden ${isCheckingOut ? 'opacity-70 pointer-events-none' : ''}`}
                         >
-                            <span>Proceed to Checkout</span>
+                            <span>{isCheckingOut ? 'Conectando con Stripe...' : 'Proceder al Pago'}</span>
                             <span className="material-icons text-sm">arrow_forward</span>
                         </button>
+                        <p className="text-[10px] text-muted-light text-center leading-relaxed font-medium uppercase tracking-[0.05em]">Pagarás como invitado vís Stripe / Klarna</p>
                     </div>
                 )}
             </div>
