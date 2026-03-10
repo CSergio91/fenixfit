@@ -71,8 +71,9 @@ export default function AdminLoginPage() {
                                     colors: {
                                         brand: '#ffffff',
                                         brandAccent: '#ffffff',
+                                        brandButtonText: '#000000',
                                         inputBackground: '#111111',
-                                        inputText: 'white',
+                                        inputText: '#ffffff',
                                         inputPlaceholder: '#444444',
                                         inputBorder: '#222222',
                                         inputBorderHover: '#444444',
@@ -82,20 +83,30 @@ export default function AdminLoginPage() {
                             },
                             className: {
                                 container: 'space-y-6',
-                                button: 'bg-white text-black font-black uppercase tracking-widest text-[10px] py-4 rounded-none hover:bg-white/90 transition-all border-none',
-                                input: 'bg-[#111111] border-[#222222] text-white rounded-none py-4 text-[13px] font-medium tracking-tight h-auto',
-                                label: 'text-white/40 text-[10px] uppercase tracking-[0.2em] font-black mb-2 block',
+                                button: 'w-full bg-white !text-black font-black uppercase tracking-[0.2em] text-[11px] py-5 rounded-none hover:bg-white/90 transition-all border-none shadow-[0_4px_30px_rgba(255,255,255,0.15)]',
+                                input: 'bg-[#111111] border-[#222222] !text-white rounded-none py-4 px-4 text-[13px] font-medium tracking-tight h-auto focus:border-white transition-colors placeholder:text-white/10',
+                                label: 'text-white/40 text-[9px] uppercase tracking-[0.3em] font-black mb-3 block',
+                                anchor: 'text-white/20 hover:text-white text-[10px] uppercase tracking-widest font-black transition-colors underline underline-offset-4 decoration-white/10 hover:decoration-white'
                             }
                         }}
                         localization={{
                             variables: {
                                 sign_in: {
-                                    email_label: 'CORREO DE COMANDO',
-                                    password_label: 'CÓDIGO DE ACCESO',
-                                    button_label: 'INICIAR SESIÓN',
+                                    email_label: 'CORREO ELECTRÓNICO',
+                                    password_label: 'CONTRASEÑA',
+                                    button_label: 'ENTRAR AL SISTEMA',
+                                    link_text: '¿Ya tienes cuenta? Iniciar sesión',
                                 },
                                 sign_up: {
-                                    button_label: 'CREAR NUEVO OPERADOR',
+                                    email_label: 'CORREO ELECTRÓNICO',
+                                    password_label: 'CREAR CONTRASEÑA',
+                                    button_label: 'REGISTRAR NUEVO ACCESO',
+                                    link_text: '¿No tienes cuenta? Registrarse',
+                                },
+                                forgot_password: {
+                                    link_text: '¿Olvidaste tu contraseña?',
+                                    button_label: 'RECUPERAR ACCESO',
+                                    email_label: 'CORREO ELECTRÓNICO',
                                 }
                             }
                         }}

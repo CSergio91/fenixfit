@@ -9,7 +9,8 @@ import {
     Clock,
     Eye,
     CheckCircle2,
-    AlertCircle
+    AlertCircle,
+    ShoppingBag
 } from "lucide-react";
 import Link from 'next/link';
 
