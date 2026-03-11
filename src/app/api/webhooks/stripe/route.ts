@@ -26,6 +26,8 @@ export async function POST(req: Request) {
     // Handle successful payments
     if (event.type === 'checkout.session.completed') {
         const session = event.data.object as Stripe.Checkout.Session;
+        // Cast to any to access shipping_details (present in API but not always in type defs)
+        const sessionAny = session as any;
         const items = JSON.parse(session.metadata?.order_items || '[]');
 
         const supabase = await createAdminClient();
@@ -39,7 +41,7 @@ export async function POST(req: Request) {
                 customer_name: session.customer_details?.name || 'Guest',
                 total_amount: (session.amount_total || 0) / 100,
                 status: 'paid',
-                shipping_address: session.shipping_details?.address || {},
+                shipping_address: sessionAny.shipping_details?.address || {},
                 utm_source: session.metadata?.utm_source || null,
                 utm_medium: session.metadata?.utm_medium || null,
                 utm_campaign: session.metadata?.utm_campaign || null,
@@ -64,7 +66,7 @@ export async function POST(req: Request) {
 
         const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
 
-        // 3. Update Stock (Simple version for demo)
+        // 3. Update Stock (Simple version)
         for (const item of items) {
             await supabase.rpc('decrement_stock', { p_id: item.p_id, qty: item.qty });
         }

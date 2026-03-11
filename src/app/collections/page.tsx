@@ -1,7 +1,7 @@
 import { productService } from "@/services/productService";
 import Image from "next/image";
 import Link from "next/link";
-import CollectionsClient from "@/components/collections/CollectionsClient";
+
 
 export default async function CollectionsPage({
     searchParams,
