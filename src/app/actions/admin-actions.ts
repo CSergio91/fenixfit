@@ -234,3 +234,59 @@ export async function getPublicSettings() {
         return null
     }
 }
+
+// ─── CATEGORIES ──────────────────────────────────────────────────────────────
+
+export async function getCategories() {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('sort_order', { ascending: true })
+    if (error) throw new Error(error.message)
+    return data || []
+}
+
+export async function upsertCategory(categoryData: {
+    id?: string
+    name: string
+    slug: string
+    description?: string
+    sizes: string[]
+    colors: { name: string; hex: string }[]
+    is_active: boolean
+    sort_order?: number
+}) {
+    const supabase = await createClient()
+    const payload: any = {
+        name: categoryData.name,
+        slug: categoryData.slug,
+        description: categoryData.description || null,
+        sizes: categoryData.sizes,
+        colors: categoryData.colors,
+        is_active: categoryData.is_active,
+        sort_order: categoryData.sort_order ?? 0,
+        updated_at: new Date().toISOString(),
+    }
+    if (categoryData.id) payload.id = categoryData.id
+
+    const { data, error } = await supabase
+        .from('categories')
+        .upsert(payload)
+        .select()
+        .single()
+
+    if (error) throw new Error(error.message)
+    revalidatePath('/secret-hq/categories')
+    revalidatePath('/collections')
+    return data
+}
+
+export async function deleteCategory(id: string) {
+    const supabase = await createClient()
+    const { error } = await supabase.from('categories').delete().eq('id', id)
+    if (error) throw new Error(error.message)
+    revalidatePath('/secret-hq/categories')
+    revalidatePath('/collections')
+}
+

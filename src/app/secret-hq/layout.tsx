@@ -23,6 +23,7 @@ import {
     X,
     Save,
     Loader2,
+    Tag,
 } from "lucide-react";
 
 interface UserProfile {
@@ -147,6 +148,7 @@ export default function AdminLayout({
     const navItems = [
         { name: 'Dashboard', href: '/secret-hq/dashboard', icon: LayoutDashboard },
         { name: 'Productos', href: '/secret-hq/products', icon: Package },
+        { name: 'Categorías', href: '/secret-hq/categories', icon: Tag },
         { name: 'Pedidos', href: '/secret-hq/orders', icon: ShoppingBag },
         { name: 'Marketing', href: '/secret-hq/marketing', icon: Megaphone },
         { name: 'Configuración', href: '/secret-hq/settings', icon: Settings },
