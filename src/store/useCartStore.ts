@@ -74,7 +74,8 @@ export const useCartStore = create<CartState>()(
             }
         }),
         {
-            name: 'fenix-fit-cart',
+            name: 'fenix-fit-cart-v1',
+            partialize: (state) => ({ items: state.items }),
         }
     )
 );

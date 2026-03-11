@@ -123,6 +123,7 @@ export async function createWhatsappOrder(orderData: {
     customer_name: string
     customer_email: string
     customer_phone?: string
+    accepts_marketing?: boolean
     shipping_address?: {
         street?: string
         city?: string
@@ -142,6 +143,7 @@ export async function createWhatsappOrder(orderData: {
             total_amount: orderData.total_amount,
             status: 'pending_whatsapp',
             checkout_method: 'whatsapp',
+            accepts_marketing: orderData.accepts_marketing || false,
             shipping_address: orderData.shipping_address || {}
         })
         .select()
@@ -166,7 +168,7 @@ export async function createWhatsappOrder(orderData: {
 // ─── MARKETING ────────────────────────────────────────────────────────────────
 export async function upsertMarketingAsset(assetData: any) {
     const supabase = await createClient()
-    const { data, error } = await supabase
+    const { data: asset, error } = await supabase
         .from('marketing_assets')
         .upsert({
             id: assetData.id || undefined,
@@ -176,14 +178,38 @@ export async function upsertMarketingAsset(assetData: any) {
             title: assetData.title,
             description: assetData.description,
             is_active: assetData.is_active ?? true,
-            priority: assetData.priority || 0
+            priority: assetData.priority || 0,
+            product_id: assetData.product_id || null,
+            sale_price: assetData.sale_price || null
         })
         .select()
         .single()
+
     if (error) throw new Error(error.message)
+
+    // If there's a product linked and a sale price, update the product table
+    if (assetData.product_id && assetData.sale_price && assetData.is_active) {
+        const { data: product } = await supabase
+            .from('products')
+            .select('price')
+            .eq('id', assetData.product_id)
+            .single()
+
+        if (product && product.price !== assetData.sale_price) {
+            await supabase
+                .from('products')
+                .update({
+                    original_price: product.price, // move current price to original
+                    price: assetData.sale_price // set new sale price
+                })
+                .eq('id', assetData.product_id)
+        }
+    }
+
     revalidatePath('/secret-hq/marketing')
+    revalidatePath('/secret-hq/products')
     revalidatePath('/')
-    return data
+    return asset
 }
 
 export async function deleteMarketingAsset(assetId: string) {
@@ -211,6 +237,7 @@ export async function upsertSettings(settingsData: any) {
             currency: settingsData.currency,
             shipping_fee: settingsData.shipping_fee,
             checkout_type: settingsData.checkout_type || 'stripe',
+            announcement_text: settingsData.announcement_text,
             updated_at: new Date().toISOString()
         })
         .select()
@@ -224,13 +251,18 @@ export async function upsertSettings(settingsData: any) {
 export async function getPublicSettings() {
     try {
         const supabase = await createAdminClient()
-        const { data } = await supabase
+        const { data, error } = await supabase
             .from('store_settings')
-            .select('checkout_type, whatsapp_number, currency, store_name')
+            .select('*')
             .eq('id', '00000000-0000-0000-0000-000000000001')
             .single()
+        if (error) {
+            console.error('getPublicSettings Error:', error.message)
+            return null
+        }
         return data
-    } catch {
+    } catch (err: any) {
+        console.error('getPublicSettings Catch Error:', err.message)
         return null
     }
 }
@@ -290,3 +322,180 @@ export async function deleteCategory(id: string) {
     revalidatePath('/collections')
 }
 
+export async function saveAsCustomer(orderId: string) {
+    const supabase = await createAdminClient()
+
+    // 1. Get order details
+    const { data: order, error: orderErr } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('id', orderId)
+        .single()
+
+    if (orderErr || !order) throw new Error('Order not found')
+
+    // 2. Check if customer exists
+    const { data: existingCustomer } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('email', order.customer_email)
+        .maybeSingle()
+
+    if (existingCustomer) {
+        // Update existing customer
+        const { error: updateErr } = await supabase
+            .from('customers')
+            .update({
+                name: order.customer_name || existingCustomer.name,
+                phone: order.customer_phone || existingCustomer.phone,
+                total_spent: Number(existingCustomer.total_spent || 0) + Number(order.total_amount),
+                orders_count: (existingCustomer.orders_count || 0) + 1,
+                last_order_at: new Date().toISOString(),
+                accepts_marketing: order.accepts_marketing || existingCustomer.accepts_marketing,
+                updated_at: new Date().toISOString()
+            })
+            .eq('id', existingCustomer.id)
+
+        if (updateErr) throw updateErr
+
+        // Link order to customer
+        await supabase.from('orders').update({ customer_id: existingCustomer.id }).eq('id', orderId)
+
+    } else {
+        // Create new customer
+        const { data: newCustomer, error: createErr } = await supabase
+            .from('customers')
+            .insert({
+                email: order.customer_email,
+                name: order.customer_name,
+                phone: order.customer_phone,
+                total_spent: order.total_amount,
+                orders_count: 1,
+                last_order_at: new Date().toISOString(),
+                accepts_marketing: order.accepts_marketing
+            })
+            .select()
+            .single()
+
+        if (createErr) throw createErr
+
+        // Link order to customer
+        await supabase.from('orders').update({ customer_id: newCustomer.id }).eq('id', orderId)
+    }
+
+    revalidatePath('/secret-hq/dashboard')
+    revalidatePath('/secret-hq/orders')
+}
+
+// ─── STAFF MANAGEMENT ────────────────────────────────────────────────────────
+
+export async function getCurrentUserRole() {
+    try {
+        const supabase = await createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) return null
+
+        const { data: staff } = await supabase
+            .from('staff')
+            .select('role')
+            .eq('email', user.email)
+            .maybeSingle()
+
+        // If no staff entry exists yet and it's the owner email from settings
+        if (!staff) {
+            const { data: settings } = await supabase
+                .from('store_settings')
+                .select('contact_email')
+                .single()
+
+            if (settings?.contact_email === user.email) {
+                // Auto-create owner entry if they are the configured contact email
+                await supabase.from('staff').insert({
+                    email: user.email,
+                    role: 'owner',
+                    full_name: user.user_metadata?.full_name || 'Owner'
+                })
+                return 'owner'
+            }
+        }
+
+        return staff?.role || null
+    } catch {
+        return null
+    }
+}
+
+export async function getStaffMembers() {
+    const supabase = await createClient()
+    const { data, error } = await supabase
+        .from('staff')
+        .select('*')
+        .order('role', { ascending: false })
+    if (error) throw new Error(error.message)
+    return data || []
+}
+
+export async function addStaffMember(staffData: { email: string; role: 'owner' | 'moderator'; full_name?: string }) {
+    const supabase = await createClient()
+
+    // Check if current user is owner
+    const role = await getCurrentUserRole()
+    if (role !== 'owner') throw new Error('No tienes permisos para gestionar el equipo')
+
+    const { data, error } = await supabase
+        .from('staff')
+        .upsert({
+            email: staffData.email.toLowerCase(),
+            role: staffData.role,
+            full_name: staffData.full_name || null
+        })
+        .select()
+        .single()
+
+    if (error) throw new Error(error.message)
+    revalidatePath('/secret-hq/settings')
+    return data
+}
+
+export async function removeStaffMember(email: string) {
+    const supabase = await createClient()
+
+    // Check if current user is owner
+    const role = await getCurrentUserRole()
+    if (role !== 'owner') throw new Error('No tienes permisos para gestionar el equipo')
+
+    const { error } = await supabase
+        .from('staff')
+        .delete()
+        .eq('email', email)
+
+    if (error) throw new Error(error.message)
+    revalidatePath('/secret-hq/settings')
+    return { success: true }
+}
+
+
+export async function globalSearch(query: string) {
+    if (!query || query.length < 2) return { products: [], orders: [] }
+
+    const supabase = await createClient()
+
+    // Search products
+    const { data: products } = await supabase
+        .from('products')
+        .select('id, name, price, stock')
+        .ilike('name', `%${query}%`)
+        .limit(5)
+
+    // Search orders
+    const { data: orders } = await supabase
+        .from('orders')
+        .select('id, customer_name, customer_email, total_amount, status')
+        .or(`customer_name.ilike.%${query}%,customer_email.ilike.%${query}%`)
+        .limit(5)
+
+    return {
+        products: products || [],
+        orders: orders || []
+    }
+}

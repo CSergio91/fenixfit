@@ -25,6 +25,7 @@ import {
     Loader2,
     Tag,
 } from "lucide-react";
+import { globalSearch } from "@/app/actions/admin-actions";
 
 interface UserProfile {
     id: string;
@@ -42,6 +43,7 @@ export default function AdminLayout({
     const router = useRouter();
     const pathname = usePathname();
     const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+    const [role, setRole] = useState<string | null>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
     const [user, setUser] = useState<UserProfile | null>(null);
     const [showUserMenu, setShowUserMenu] = useState(false);
@@ -50,7 +52,15 @@ export default function AdminLayout({
     const [editPassword, setEditPassword] = useState("");
     const [isSaving, setIsSaving] = useState(false);
     const [saveMsg, setSaveMsg] = useState("");
+    const [searchQuery, setSearchQuery] = useState("");
+    const [searchResults, setSearchResults] = useState<{ products: any[], orders: any[] }>({ products: [], orders: [] });
+    const [isSearching, setIsSearching] = useState(false);
+    const [showSearchResults, setShowSearchResults] = useState(false);
+    const [showNotifications, setShowNotifications] = useState(false);
+    const [notifications, setNotifications] = useState<any[]>([]);
     const userMenuRef = useRef<HTMLDivElement>(null);
+    const notificationsRef = useRef<HTMLDivElement>(null);
+    const searchRef = useRef<HTMLDivElement>(null);
 
     const isAccessPage = !!(pathname && pathname.includes("/secret-hq/access"));
 
@@ -69,10 +79,71 @@ export default function AdminLayout({
                     avatar_url: session.user.user_metadata?.avatar_url || "",
                 });
                 setEditName(session.user.user_metadata?.full_name || session.user.user_metadata?.name || "");
+
+                // Fetch role
+                const { data: staff } = await supabase
+                    .from('staff')
+                    .select('role')
+                    .eq('email', session.user.email)
+                    .maybeSingle();
+
+                if (staff) {
+                    setRole(staff.role);
+                } else {
+                    // Check if it's the owner email from settings
+                    const { data: settings } = await supabase
+                        .from('store_settings')
+                        .select('contact_email')
+                        .single();
+
+                    if (settings?.contact_email === session.user.email) {
+                        setRole('owner');
+                        // Auto-create staff record for owner
+                        await supabase.from('staff').upsert({
+                            email: session.user.email,
+                            role: 'owner',
+                            full_name: session.user.user_metadata?.full_name || 'Owner'
+                        });
+                    } else {
+                        setRole('moderator');
+                    }
+                }
             }
             setIsAdmin(!!session);
         };
         checkUser();
+
+        // Real-time notifications using the dedicated table
+        const channel = supabase
+            .channel('notifications-realtime')
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'notifications'
+            }, (payload) => {
+                setNotifications(prev => [payload.new, ...prev]);
+                // Play striking "Cash Register" sound
+                try {
+                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2012/2012-preview.mp3');
+                    audio.volume = 0.7;
+                    audio.play();
+                } catch (e) {
+                    console.log('Audio error:', e);
+                }
+            })
+            .subscribe();
+
+        // Initial fetch of unread notifications
+        const fetchUnread = async () => {
+            const { data } = await supabase
+                .from('notifications')
+                .select('*')
+                .eq('is_read', false)
+                .order('created_at', { ascending: false })
+                .limit(20);
+            if (data) setNotifications(data);
+        };
+        fetchUnread();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setIsAdmin(!!session);
@@ -89,7 +160,10 @@ export default function AdminLayout({
             }
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            subscription.unsubscribe();
+            supabase.removeChannel(channel);
+        };
     }, [supabase, router, isAccessPage]);
 
     // Close user menu on outside click
@@ -98,10 +172,34 @@ export default function AdminLayout({
             if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
                 setShowUserMenu(false);
             }
+            if (notificationsRef.current && !notificationsRef.current.contains(e.target as Node)) {
+                setShowNotifications(false);
+            }
+            if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+                setShowSearchResults(false);
+            }
         };
         document.addEventListener("mousedown", handler);
         return () => document.removeEventListener("mousedown", handler);
     }, []);
+
+    useEffect(() => {
+        const fetchResults = async () => {
+            if (searchQuery.length >= 2) {
+                setIsSearching(true);
+                const results = await globalSearch(searchQuery);
+                setSearchResults(results);
+                setIsSearching(false);
+                setShowSearchResults(true);
+            } else {
+                setSearchResults({ products: [], orders: [] });
+                setShowSearchResults(false);
+            }
+        };
+
+        const timer = setTimeout(fetchResults, 400);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
@@ -130,6 +228,16 @@ export default function AdminLayout({
         }
     };
 
+    // Access control for moderators
+    useEffect(() => {
+        if (role === 'moderator' && pathname) {
+            const forbiddenPaths = ['/secret-hq/settings', '/secret-hq/categories', '/secret-hq/marketing'];
+            if (forbiddenPaths.some(p => pathname.startsWith(p))) {
+                router.replace('/secret-hq/dashboard');
+            }
+        }
+    }, [role, pathname, router]);
+
     if (isAccessPage) {
         return <div className="min-h-screen bg-black">{children}</div>;
     }
@@ -145,7 +253,7 @@ export default function AdminLayout({
         );
     }
 
-    const navItems = [
+    const allNavItems = [
         { name: 'Dashboard', href: '/secret-hq/dashboard', icon: LayoutDashboard },
         { name: 'Productos', href: '/secret-hq/products', icon: Package },
         { name: 'Categorías', href: '/secret-hq/categories', icon: Tag },
@@ -153,6 +261,14 @@ export default function AdminLayout({
         { name: 'Marketing', href: '/secret-hq/marketing', icon: Megaphone },
         { name: 'Configuración', href: '/secret-hq/settings', icon: Settings },
     ];
+
+    const navItems = allNavItems.filter(item => {
+        if (role === 'moderator') {
+            // Moderators can only see Dashboard, Products and Orders
+            return ['Dashboard', 'Productos', 'Pedidos'].includes(item.name);
+        }
+        return true;
+    });
 
     // Display name: prefer full_name, else email username
     const displayName = user?.full_name || user?.email?.split("@")[0] || "Admin";
@@ -163,7 +279,7 @@ export default function AdminLayout({
         <div className="min-h-screen bg-[#050505] text-white flex overflow-hidden font-sans">
             {/* ── Sidebar ── */}
             <aside
-                className={`fixed lg:static inset-y-0 left-0 z-50 bg-[#090909] border-r border-white/[0.06] transition-all duration-[400ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)] flex-shrink-0 ${isSidebarOpen ? 'w-[260px]' : 'w-[72px]'}`}
+                className={`hidden lg:flex fixed lg:static inset-y-0 left-0 z-50 bg-[#090909] border-r border-white/[0.06] transition-all duration-[400ms] ease-[cubic-bezier(0.25,0.46,0.45,0.94)] flex-shrink-0 ${isSidebarOpen ? 'w-[260px]' : 'w-[72px]'}`}
             >
                 <div className="flex flex-col h-full">
                     {/* ── Sidebar Header: Logo + Collapse button ── */}
@@ -179,9 +295,6 @@ export default function AdminLayout({
                                     className="object-contain w-full h-full"
                                 />
                             </div>
-                            <span className={`ml-2.5 font-display text-[13px] font-black italic tracking-tighter uppercase transition-all duration-300 whitespace-nowrap overflow-hidden ${isSidebarOpen ? 'max-w-[140px] opacity-100' : 'max-w-0 opacity-0'}`}>
-                                Fenix HQ
-                            </span>
                         </div>
 
                         {/* Collapse button — top right of sidebar header */}
@@ -250,21 +363,136 @@ export default function AdminLayout({
             <main className="flex-1 flex flex-col h-screen overflow-hidden relative min-w-0">
                 {/* Top Header */}
                 <header className="h-[72px] border-b border-white/[0.06] bg-[#090909]/80 backdrop-blur-3xl flex items-center justify-between px-8 sticky top-0 z-40">
-                    <div className="flex items-center bg-white/[0.04] border border-white/[0.06] px-4 py-2.5 w-full max-w-sm focus-within:border-white/20 transition-all">
-                        <Search size={14} className="text-white/20 shrink-0" />
-                        <input
-                            type="text"
-                            placeholder="Buscar en el sistema..."
-                            className="bg-transparent border-none focus:ring-0 text-[11px] font-bold tracking-widest text-white ml-3 w-full placeholder:text-white/10 uppercase outline-none"
-                        />
+                    <div className="relative group flex-1 max-w-sm" ref={searchRef}>
+                        <div className="flex items-center bg-white/[0.04] border border-white/[0.06] px-4 py-2.5 w-full focus-within:border-white/20 transition-all">
+                            <Search size={14} className="text-white/20 shrink-0" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                onFocus={() => searchQuery.length >= 2 && setShowSearchResults(true)}
+                                placeholder="Buscar en el sistema..."
+                                className="bg-transparent border-none focus:ring-0 text-[11px] font-bold tracking-widest text-white ml-3 w-full placeholder:text-white/10 uppercase outline-none"
+                            />
+                            {isSearching && <Loader2 size={12} className="animate-spin text-white/20" />}
+                        </div>
+
+                        {/* Search Results Dropdown */}
+                        {showSearchResults && (
+                            <div className="absolute top-full left-0 mt-2 w-full bg-[#0d0d0d] border border-white/10 shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                <div className="max-h-[70vh] overflow-y-auto">
+                                    {searchResults.products.length === 0 && searchResults.orders.length === 0 ? (
+                                        <div className="p-8 text-center">
+                                            <p className="text-[10px] text-white/20 uppercase tracking-[0.2em] font-black">No se encontraron resultados</p>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            {searchResults.products.length > 0 && (
+                                                <div className="p-2 border-b border-white/5">
+                                                    <p className="px-3 py-2 text-[8px] font-black uppercase tracking-[0.3em] text-white/20">Productos</p>
+                                                    {searchResults.products.map(p => (
+                                                        <Link
+                                                            key={p.id}
+                                                            href="/secret-hq/products"
+                                                            onClick={() => setShowSearchResults(false)}
+                                                            className="flex items-center justify-between px-3 py-3 hover:bg-white/[0.03] transition-all group"
+                                                        >
+                                                            <span className="text-[10px] font-black uppercase tracking-wider text-white/60 group-hover:text-white">{p.name}</span>
+                                                            <span className="text-[9px] font-black text-emerald-400">{p.price}€</span>
+                                                        </Link>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            {searchResults.orders.length > 0 && (
+                                                <div className="p-2">
+                                                    <p className="px-3 py-2 text-[8px] font-black uppercase tracking-[0.3em] text-white/20">Pedidos</p>
+                                                    {searchResults.orders.map(o => (
+                                                        <Link
+                                                            key={o.id}
+                                                            href="/secret-hq/orders"
+                                                            onClick={() => setShowSearchResults(false)}
+                                                            className="flex flex-col px-3 py-3 hover:bg-white/[0.03] transition-all group"
+                                                        >
+                                                            <div className="flex justify-between items-center">
+                                                                <span className="text-[10px] font-black uppercase tracking-wider text-white/60 group-hover:text-white">{o.customer_name}</span>
+                                                                <span className="text-[9px] font-black text-white/40">{o.total_amount}€</span>
+                                                            </div>
+                                                            <span className="text-[8px] text-white/20 mt-1">{o.customer_email}</span>
+                                                        </Link>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex items-center space-x-4">
                         {/* Bell */}
-                        <button className="relative text-white/30 hover:text-white transition-colors p-2">
-                            <Bell size={18} />
-                            <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-emerald-400 rounded-full" />
-                        </button>
+                        <div className="relative" ref={notificationsRef}>
+                            <button
+                                onClick={() => setShowNotifications(!showNotifications)}
+                                className={`relative transition-colors p-2 ${notifications.length > 0 ? 'text-white' : 'text-white/30 hover:text-white'}`}
+                            >
+                                <Bell size={18} className={notifications.length > 0 ? 'animate-bounce' : ''} />
+                                {notifications.length > 0 && (
+                                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                                )}
+                            </button>
+
+                            {/* Notifications Dropdown */}
+                            {showNotifications && (
+                                <div className="absolute right-0 top-full mt-2 w-80 bg-[#0d0d0d] border border-white/10 shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+                                    <div className="px-5 py-4 border-b border-white/5 flex justify-between items-center">
+                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Notificaciones</p>
+                                        {notifications.length > 0 && (
+                                            <button
+                                                onClick={async () => {
+                                                    await supabase.from('notifications').update({ is_read: true }).in('id', notifications.map(n => n.id));
+                                                    setNotifications([]);
+                                                }}
+                                                className="text-[8px] font-black uppercase tracking-widest text-emerald-400 hover:text-emerald-300"
+                                            >
+                                                Marcar todo como leído
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="max-h-[350px] overflow-y-auto">
+                                        {notifications.length === 0 ? (
+                                            <div className="p-8 text-center">
+                                                <p className="text-[9px] text-white/20 uppercase tracking-widest font-black">No hay notificaciones</p>
+                                            </div>
+                                        ) : (
+                                            notifications.map(notif => (
+                                                <Link
+                                                    key={notif.id}
+                                                    href={notif.type === 'new_order' ? "/secret-hq/orders" : "#"}
+                                                    onClick={() => setShowNotifications(false)}
+                                                    className="flex flex-col px-5 py-4 hover:bg-white/[0.03] transition-all border-b border-white/5 group"
+                                                >
+                                                    <div className="flex justify-between items-start">
+                                                        <span className="text-[10px] font-black uppercase tracking-wider text-emerald-400">{notif.title}</span>
+                                                        <span className="text-[8px] text-white/20 uppercase tracking-widest">{new Date(notif.created_at).toLocaleTimeString()}</span>
+                                                    </div>
+                                                    <p className="text-[11px] font-black uppercase tracking-widest mt-1 text-white/80 group-hover:text-white line-clamp-2 leading-relaxed">{notif.message}</p>
+                                                </Link>
+                                            ))
+                                        )}
+                                    </div>
+                                    {notifications.length > 0 && (
+                                        <Link
+                                            href="/secret-hq/orders"
+                                            onClick={() => setShowNotifications(false)}
+                                            className="block py-3 text-center text-[9px] font-black uppercase tracking-[0.2em] text-white/20 hover:text-white hover:bg-white/[0.02] border-t border-white/5"
+                                        >
+                                            Ver todos los pedidos
+                                        </Link>
+                                    )}
+                                </div>
+                            )}
+                        </div>
 
                         {/* User info + settings dropdown */}
                         <div className="relative" ref={userMenuRef}>
@@ -334,8 +562,8 @@ export default function AdminLayout({
                 </header>
 
                 {/* Page */}
-                <section className="flex-1 overflow-y-auto">
-                    <div className="p-10 max-w-7xl mx-auto">
+                <section className="flex-1 overflow-y-auto pb-24 lg:pb-0">
+                    <div className="p-4 sm:p-10 max-w-7xl mx-auto">
                         {children}
                     </div>
                 </section>
@@ -427,6 +655,26 @@ export default function AdminLayout({
                     </div>
                 </div>
             )}
+
+            {/* ── Mobile Bottom Nav ── */}
+            <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#090909]/95 backdrop-blur-md border-t border-white/[0.06] z-50 pb-safe pb-4 pt-2 px-1">
+                <div className="flex justify-around items-center">
+                    {navItems.map((item) => {
+                        const isActive = pathname === item.href || pathname?.startsWith(item.href);
+                        const Icon = item.icon;
+                        return (
+                            <Link
+                                key={item.name}
+                                href={item.href}
+                                className={`flex flex-col items-center justify-center p-2 min-w-[60px] transition-all duration-200 ${isActive ? 'text-white' : 'text-white/30 hover:text-white/70'}`}
+                            >
+                                <Icon size={20} className={`mb-1 transition-all ${isActive ? 'scale-110 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]' : ''}`} />
+                                <span className="text-[8px] font-black uppercase tracking-wider">{item.name.substring(0, 7) + (item.name.length > 7 ? '.' : '')}</span>
+                            </Link>
+                        );
+                    })}
+                </div>
+            </nav>
         </div>
     );
 }

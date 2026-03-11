@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     });
 
     try {
-        const { items, customerEmail, utmParams } = await req.json();
+        const { items, customerEmail, utmParams, acceptsMarketing } = await req.json();
 
         const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ||
             process.env.NEXT_PUBLIC_BASE_URL ||
@@ -43,6 +43,7 @@ export async function POST(req: Request) {
                 utm_source: utmParams?.source || '',
                 utm_medium: utmParams?.medium || '',
                 utm_campaign: utmParams?.campaign || '',
+                accepts_marketing: acceptsMarketing ? 'true' : 'false',
                 order_items: JSON.stringify(items.map((it: any) => ({
                     p_id: it.product.id,
                     v_id: it.variant.id,

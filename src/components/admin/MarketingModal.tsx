@@ -1,15 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Save, Loader2, Monitor, Smartphone } from 'lucide-react'
+import { X, Save, Loader2, Monitor, Smartphone, Tag, Percent } from 'lucide-react'
 import { upsertMarketingAsset } from '@/app/actions/admin-actions'
 
 interface MarketingModalProps {
     asset?: any
+    products: any[]
     onClose: () => void
+    onSuccess?: (asset: any) => void
 }
 
-export default function MarketingModal({ asset, onClose }: MarketingModalProps) {
+export default function MarketingModal({ asset, products, onClose }: MarketingModalProps) {
     const [loading, setLoading] = useState(false)
     const [formData, setFormData] = useState<any>({
         id: asset?.id || null,
@@ -19,14 +21,22 @@ export default function MarketingModal({ asset, onClose }: MarketingModalProps) 
         title: asset?.title || '',
         description: asset?.description || '',
         is_active: asset?.is_active ?? true,
-        priority: asset?.priority || 0
+        priority: asset?.priority || 0,
+        product_id: asset?.product_id || '',
+        sale_price: asset?.sale_price || ''
     })
+
+    const selectedProduct = products.find(p => p.id === formData.product_id)
+    const discountPercent = selectedProduct && formData.sale_price
+        ? Math.round(((selectedProduct.price - formData.sale_price) / selectedProduct.price) * 100)
+        : 0
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         setLoading(true)
         try {
-            await upsertMarketingAsset(formData)
+            const updated = await upsertMarketingAsset(formData)
+            if (onSuccess) onSuccess(updated)
             onClose()
         } catch (error) {
             console.error(error)
@@ -113,6 +123,52 @@ export default function MarketingModal({ asset, onClose }: MarketingModalProps) 
                             className="w-full bg-white/5 border border-white/10 p-4 text-white text-[11px] focus:border-white outline-none"
                             placeholder="/collections/sale"
                         />
+                    </div>
+
+                    <div className="pt-6 border-t border-white/5 space-y-6">
+                        <div className="flex items-center space-x-3 mb-4">
+                            <Tag size={16} className="text-emerald-400" />
+                            <span className="text-white/40 text-[10px] uppercase tracking-[0.3em] font-black">Asociar a Producto (Opcional)</span>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-6">
+                            <div>
+                                <label className="text-white/20 text-[9px] uppercase tracking-widest font-black mb-2 block">Seleccionar Producto</label>
+                                <select
+                                    value={formData.product_id}
+                                    onChange={e => setFormData({ ...formData, product_id: e.target.value, target_url: `/product/${e.target.value}` })}
+                                    className="w-full bg-white/5 border border-white/10 p-4 text-white text-sm focus:border-white outline-none"
+                                >
+                                    <option value="">Ninguno</option>
+                                    {products.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name} - {p.price}€</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-white/20 text-[9px] uppercase tracking-widest font-black mb-2 block">Precio de Oferta</label>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        value={formData.sale_price}
+                                        onChange={e => setFormData({ ...formData, sale_price: parseFloat(e.target.value) })}
+                                        className="w-full bg-white/5 border border-white/10 p-4 text-white text-sm focus:border-white outline-none"
+                                        placeholder="0.00"
+                                    />
+                                    {discountPercent > 0 && (
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 bg-emerald-500 text-black text-[9px] font-black px-2 py-1 flex items-center">
+                                            <Percent size={10} className="mr-1" /> {discountPercent}% OFF
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                        {selectedProduct && (
+                            <p className="text-[10px] text-white/30 italic">
+                                * Se actualizará el precio de {selectedProduct.name} de {selectedProduct.price}€ a {formData.sale_price}€ al activar esta campaña.
+                            </p>
+                        )}
                     </div>
 
                     <div className="flex items-center space-x-6 pt-4">

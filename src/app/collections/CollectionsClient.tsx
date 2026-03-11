@@ -41,26 +41,33 @@ export default function CollectionsClient({
 
     const activeCategories = categories.filter(c => c.is_active)
 
-    // Derive available sizes/colors from the selected category (or all products)
+    // Derive available sizes/colors from the products
     const availableSizes = useMemo(() => {
-        if (activeCategory !== 'all') {
-            const cat = activeCategories.find(c => c.slug === activeCategory)
-            if (cat?.sizes?.length) return cat.sizes
-        }
-        // Fallback: union of all category sizes
-        const all = activeCategories.flatMap(c => c.sizes || [])
-        return [...new Set(all)]
-    }, [activeCategory, activeCategories])
+        const pool = activeCategory === 'all'
+            ? products
+            : products.filter(p => p.category?.toLowerCase() === activeCategories.find(c => c.slug === activeCategory)?.name.toLowerCase())
+
+        const all = pool.flatMap(p => p.sizes || [])
+        return [...new Set(all)].sort()
+    }, [activeCategory, activeCategories, products])
 
     const availableColors = useMemo(() => {
-        if (activeCategory !== 'all') {
-            const cat = activeCategories.find(c => c.slug === activeCategory)
-            if (cat?.colors?.length) return cat.colors
-        }
-        const all = activeCategories.flatMap(c => c.colors || [])
+        const pool = activeCategory === 'all'
+            ? products
+            : products.filter(p => p.category?.toLowerCase() === activeCategories.find(c => c.slug === activeCategory)?.name.toLowerCase())
+
+        const allVariants = pool.flatMap(p => p.variants || [])
+        const colors: CategoryColor[] = []
         const seen = new Set<string>()
-        return all.filter(c => { if (seen.has(c.hex)) return false; seen.add(c.hex); return true })
-    }, [activeCategory, activeCategories])
+
+        for (const v of allVariants) {
+            if (v.color_hex && !seen.has(v.color_hex)) {
+                seen.add(v.color_hex)
+                colors.push({ name: v.color_name, hex: v.color_hex })
+            }
+        }
+        return colors
+    }, [activeCategory, activeCategories, products])
 
     const toggleSize = (s: string) =>
         setActiveSizes(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])

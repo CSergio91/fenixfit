@@ -4,12 +4,16 @@ import { useState } from 'react'
 import {
     Save, Loader2, Globe, MessageSquare, Mail, Phone, MapPin,
     CheckCircle2, Instagram, ExternalLink, Database,
-    CreditCard, MessageCircle, ShoppingBag, ChevronRight
+    CreditCard, MessageCircle, ShoppingBag, ChevronRight,
+    Users, UserPlus, Shield, Trash2, ShieldCheck, MailPlus
 } from "lucide-react"
-import { upsertSettings } from '@/app/actions/admin-actions'
+import { upsertSettings, addStaffMember, removeStaffMember } from '@/app/actions/admin-actions'
+import { useSettingsStore } from '@/store/useSettingsStore'
 
 interface SettingsClientProps {
     initialSettings: any
+    staffMembers: any[]
+    currentRole: string | null
 }
 
 type CheckoutType = 'stripe' | 'whatsapp' | 'email'
@@ -38,11 +42,17 @@ const CHECKOUT_OPTIONS: { value: CheckoutType; label: string; icon: any; descrip
     }
 ]
 
-export default function SettingsClient({ initialSettings }: SettingsClientProps) {
+export default function SettingsClient({ initialSettings, staffMembers, currentRole }: SettingsClientProps) {
     const [loading, setLoading] = useState(false)
     const [saved, setSaved] = useState(false)
     const [dbError, setDbError] = useState(false)
-    const [formData, setFormData] = useState<any>(initialSettings || {
+    const [staff, setStaff] = useState<any[]>(staffMembers || [])
+    const [newStaffEmail, setNewStaffEmail] = useState('')
+    const [newStaffName, setNewStaffName] = useState('')
+    const [staffLoading, setStaffLoading] = useState(false)
+    const fetchSettings = useSettingsStore(state => state.fetchSettings)
+
+    const [formData, setFormData] = useState<any>({
         store_name: 'Fenix Fit',
         contact_email: 'cbs@bcnnorth.com',
         contact_phone: '',
@@ -51,7 +61,9 @@ export default function SettingsClient({ initialSettings }: SettingsClientProps)
         whatsapp_number: '',
         currency: 'USD',
         shipping_fee: 0,
-        checkout_type: 'stripe'
+        checkout_type: 'stripe',
+        announcement_text: '',
+        ...initialSettings
     })
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -62,6 +74,7 @@ export default function SettingsClient({ initialSettings }: SettingsClientProps)
         try {
             await upsertSettings(formData)
             setSaved(true)
+            await fetchSettings()
             setTimeout(() => setSaved(false), 3000)
         } catch (error: any) {
             if (error?.message?.includes('schema cache') || error?.message?.includes('relation') || error?.message?.includes('does not exist') || error?.message?.includes('column')) {
@@ -71,6 +84,39 @@ export default function SettingsClient({ initialSettings }: SettingsClientProps)
             }
         } finally {
             setLoading(false)
+        }
+    }
+
+    const handleAddStaff = async () => {
+        if (!newStaffEmail) return
+        setStaffLoading(true)
+        try {
+            const result = await addStaffMember({
+                email: newStaffEmail,
+                role: 'moderator',
+                full_name: newStaffName
+            })
+            setStaff(prev => [...prev.filter(s => s.email !== newStaffEmail), result])
+            setNewStaffEmail('')
+            setNewStaffName('')
+            alert('Moderador asignado correctamente. Ahora puede entrar con su correo.')
+        } catch (err: any) {
+            alert(err.message)
+        } finally {
+            setStaffLoading(false)
+        }
+    }
+
+    const handleRemoveStaff = async (email: string) => {
+        if (!confirm('¿Estás seguro de eliminar a este miembro del equipo?')) return
+        setStaffLoading(true)
+        try {
+            await removeStaffMember(email)
+            setStaff(prev => prev.filter(s => s.email !== email))
+        } catch (err: any) {
+            alert(err.message)
+        } finally {
+            setStaffLoading(false)
         }
     }
 
@@ -98,7 +144,7 @@ export default function SettingsClient({ initialSettings }: SettingsClientProps)
                         <div>
                             <p className="text-[11px] font-black uppercase tracking-widest text-amber-400 mb-2">Tabla Faltante — Acción Requerida</p>
                             <p className="text-[11px] text-white/40 leading-relaxed mb-4">
-                                La tabla <code className="text-amber-300 bg-amber-400/10 px-1">store_settings</code> no existe o le faltan columnas.
+                                La tabla <code className="text-amber-300 bg-amber-400/10 px-1">store_settings</code> no existe o le faltan columnas o la tabla <code className="text-amber-300 bg-amber-400/10 px-1">staff</code> no existe.
                                 Ejecuta el SQL en el editor de Supabase:
                             </p>
                             <a
@@ -112,40 +158,6 @@ export default function SettingsClient({ initialSettings }: SettingsClientProps)
                             </a>
                         </div>
                     </div>
-                    <pre className="bg-black/40 border border-white/5 p-6 text-[10px] text-emerald-400 overflow-x-auto leading-relaxed font-mono">
-                        {`create table if not exists public.store_settings (
-  id uuid primary key default gen_random_uuid(),
-  store_name text default 'Fenix Fit',
-  contact_email text,
-  contact_phone text,
-  address text,
-  instagram_url text,
-  whatsapp_number text,
-  currency text default 'USD',
-  shipping_fee numeric(10,2) default 0.00,
-  checkout_type text default 'stripe',
-  updated_at timestamptz default now()
-);
-
-alter table public.store_settings enable row level security;
-
-create policy if not exists "store_settings_public_read"
-  on public.store_settings for select using (true);
-
-create policy if not exists "store_settings_auth_all"
-  on public.store_settings for all
-  using (auth.role() = 'authenticated')
-  with check (auth.role() = 'authenticated');
-
-insert into public.store_settings
-  (id, store_name, contact_email, currency, checkout_type)
-values
-  ('00000000-0000-0000-0000-000000000001', 'Fenix Fit', 'cbs@bcnnorth.com', 'USD', 'stripe')
-on conflict (id) do nothing;
-
--- Add checkout_type if the table exists but column is missing:
-alter table public.store_settings add column if not exists checkout_type text default 'stripe';`}
-                    </pre>
                 </div>
             )}
 
@@ -156,6 +168,88 @@ alter table public.store_settings add column if not exists checkout_type text de
                     <p className="text-[11px] font-black uppercase tracking-widest text-emerald-400">
                         Configuración sincronizada correctamente
                     </p>
+                </div>
+            )}
+
+            {currentRole === 'owner' && (
+                <div className="bg-[#0a0a0a] border border-white/5 p-10">
+                    <h3 className="text-white/40 text-[10px] uppercase tracking-widest font-black mb-2 flex items-center">
+                        <Users size={14} className="mr-3 text-emerald-400" /> Administrar Equipo
+                    </h3>
+                    <p className="text-white/20 text-[10px] mb-8">Asigna moderadores para que te ayuden a gestionar los pedidos. No podrán borrar productos ni cambiar ajustes.</p>
+
+                    <div className="space-y-6">
+                        {/* Add Form */}
+                        <div className="flex flex-wrap gap-4 items-end bg-white/5 p-6 border border-white/5">
+                            <div className="flex-1 min-w-[200px]">
+                                <label className="text-white/20 text-[8px] uppercase tracking-widest font-black mb-2 block">Email del Moderador</label>
+                                <input
+                                    type="email"
+                                    value={newStaffEmail}
+                                    onChange={e => setNewStaffEmail(e.target.value)}
+                                    className="w-full bg-black/40 border border-white/10 p-3 text-white text-[11px] uppercase font-black tracking-widest outline-none focus:border-emerald-500/50"
+                                    placeholder="correo@ejemplo.com"
+                                />
+                            </div>
+                            <div className="flex-1 min-w-[200px]">
+                                <label className="text-white/20 text-[8px] uppercase tracking-widest font-black mb-2 block">Nombre (opcional)</label>
+                                <input
+                                    type="text"
+                                    value={newStaffName}
+                                    onChange={e => setNewStaffName(e.target.value)}
+                                    className="w-full bg-black/40 border border-white/10 p-3 text-white text-[11px] uppercase font-black tracking-widest outline-none focus:border-emerald-500/50"
+                                    placeholder="Nombre del Vendedor"
+                                />
+                            </div>
+                            <button
+                                onClick={handleAddStaff}
+                                disabled={staffLoading || !newStaffEmail}
+                                className="bg-emerald-500 text-black px-6 py-3 text-[10px] font-black uppercase tracking-widest flex items-center space-x-2 hover:bg-emerald-400 transition-all disabled:opacity-50"
+                            >
+                                <UserPlus size={14} />
+                                <span>{staffLoading ? 'Asignando...' : 'Asignar Moderador'}</span>
+                            </button>
+                        </div>
+
+                        {/* Staff List */}
+                        <div className="space-y-2">
+                            {staff.map((member) => (
+                                <div key={member.email} className="flex items-center justify-between p-4 bg-white/[0.02] border border-white/5 hover:bg-white/[0.04] transition-all">
+                                    <div className="flex items-center space-x-4">
+                                        <div className={`w-8 h-8 flex items-center justify-center font-black text-[10px] ${member.role === 'owner' ? 'bg-amber-400 text-black' : 'bg-white/10 text-white'}`}>
+                                            {member.role === 'owner' ? <ShieldCheck size={14} /> : <Shield size={14} />}
+                                        </div>
+                                        <div>
+                                            <p className="text-[11px] font-black uppercase tracking-widest text-white">
+                                                {member.full_name || 'Sin Nombre'}
+                                                {member.role === 'owner' && <span className="ml-2 text-amber-400 text-[8px] border border-amber-400/20 px-1.5 py-0.5 rounded-full">Propietario</span>}
+                                                {member.role === 'moderator' && <span className="ml-2 text-blue-400 text-[8px] border border-blue-400/20 px-1.5 py-0.5 rounded-full">Moderador</span>}
+                                            </p>
+                                            <p className="text-[9px] text-white/30 uppercase tracking-widest flex items-center mt-1">
+                                                <Mail size={10} className="mr-1.5 opacity-30" />
+                                                {member.email}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    {member.role !== 'owner' && (
+                                        <button
+                                            onClick={() => handleRemoveStaff(member.email)}
+                                            disabled={staffLoading}
+                                            className="p-2 text-white/10 hover:text-rose-500 hover:bg-rose-500/10 transition-all"
+                                            title="Eliminar acceso"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                            {staff.length === 0 && (
+                                <p className="text-center py-8 text-[10px] text-white/10 uppercase tracking-[0.2em] italic font-black">
+                                    No hay miembros en el equipo instalados
+                                </p>
+                            )}
+                        </div>
+                    </div>
                 </div>
             )}
 
@@ -178,17 +272,17 @@ alter table public.store_settings add column if not exists checkout_type text de
                                     type="button"
                                     onClick={() => setFormData({ ...formData, checkout_type: opt.value })}
                                     className={`flex items-center space-x-5 p-6 text-left border transition-all duration-200 ${isActive
-                                            ? opt.value === 'stripe' ? 'border-blue-500/50 bg-blue-500/5'
-                                                : opt.value === 'whatsapp' ? 'border-emerald-500/50 bg-emerald-500/5'
-                                                    : 'border-violet-500/50 bg-violet-500/5'
-                                            : 'border-white/5 hover:border-white/20 bg-transparent'
+                                        ? opt.value === 'stripe' ? 'border-blue-500/50 bg-blue-500/5'
+                                            : opt.value === 'whatsapp' ? 'border-emerald-500/50 bg-emerald-500/5'
+                                                : 'border-violet-500/50 bg-violet-500/5'
+                                        : 'border-white/5 hover:border-white/20 bg-transparent'
                                         }`}
                                 >
                                     <div className={`w-12 h-12 flex items-center justify-center shrink-0 ${isActive
-                                            ? opt.value === 'stripe' ? 'bg-blue-500/10'
-                                                : opt.value === 'whatsapp' ? 'bg-emerald-500/10'
-                                                    : 'bg-violet-500/10'
-                                            : 'bg-white/5'
+                                        ? opt.value === 'stripe' ? 'bg-blue-500/10'
+                                            : opt.value === 'whatsapp' ? 'bg-emerald-500/10'
+                                                : 'bg-violet-500/10'
+                                        : 'bg-white/5'
                                         }`}>
                                         <Icon size={20} className={
                                             isActive
@@ -205,10 +299,10 @@ alter table public.store_settings add column if not exists checkout_type text de
                                         <p className="text-[10px] text-white/25 leading-relaxed">{opt.description}</p>
                                     </div>
                                     <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${isActive
-                                            ? opt.value === 'stripe' ? 'border-blue-400 bg-blue-400'
-                                                : opt.value === 'whatsapp' ? 'border-emerald-400 bg-emerald-400'
-                                                    : 'border-violet-400 bg-violet-400'
-                                            : 'border-white/20 bg-transparent'
+                                        ? opt.value === 'stripe' ? 'border-blue-400 bg-blue-400'
+                                            : opt.value === 'whatsapp' ? 'border-emerald-400 bg-emerald-400'
+                                                : 'border-violet-400 bg-violet-400'
+                                        : 'border-white/20 bg-transparent'
                                         }`}>
                                         {isActive && <CheckCircle2 size={10} className="text-black" />}
                                     </div>
@@ -226,7 +320,7 @@ alter table public.store_settings add column if not exists checkout_type text de
                             </label>
                             <input
                                 type="text"
-                                value={formData.whatsapp_number}
+                                value={formData.whatsapp_number || ''}
                                 onChange={e => setFormData({ ...formData, whatsapp_number: e.target.value })}
                                 className="w-full bg-white/5 border border-emerald-500/30 p-4 text-white text-sm focus:border-emerald-400 outline-none transition-all"
                                 placeholder="+34 612 345 678"
@@ -246,7 +340,7 @@ alter table public.store_settings add column if not exists checkout_type text de
                             <label className="text-white/20 text-[9px] uppercase tracking-widest font-black mb-2 block">Nombre de la Tienda</label>
                             <input
                                 type="text"
-                                value={formData.store_name}
+                                value={formData.store_name || ''}
                                 onChange={e => setFormData({ ...formData, store_name: e.target.value })}
                                 className="w-full bg-white/5 border border-white/10 p-4 text-white text-sm font-black uppercase tracking-widest focus:border-white outline-none transition-all"
                             />
@@ -267,9 +361,9 @@ alter table public.store_settings add column if not exists checkout_type text de
                                 </select>
                             </div>
                             <div>
-                                <label className="text-white/20 text-[9px] uppercase tracking-widest font-black mb-2 block">Tarifa de Envío ($)</label>
+                                <label className="text-white/20 text-[9px] uppercase tracking-widest font-black mb-2 block">Tarifa de Envío ({formData.currency === 'EUR' ? '€' : '$'})</label>
                                 <div className="relative">
-                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 font-black">$</span>
+                                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-white/30 font-black">{formData.currency === 'EUR' ? '€' : '$'}</span>
                                     <input
                                         type="number" step="0.01" min="0"
                                         value={formData.shipping_fee}
@@ -294,7 +388,7 @@ alter table public.store_settings add column if not exists checkout_type text de
                             </label>
                             <input
                                 type="email"
-                                value={formData.contact_email}
+                                value={formData.contact_email || ''}
                                 onChange={e => setFormData({ ...formData, contact_email: e.target.value })}
                                 className="w-full bg-white/5 border border-white/10 p-4 text-white text-sm focus:border-white outline-none"
                             />
@@ -305,7 +399,7 @@ alter table public.store_settings add column if not exists checkout_type text de
                             </label>
                             <input
                                 type="text"
-                                value={formData.whatsapp_number}
+                                value={formData.whatsapp_number || ''}
                                 onChange={e => setFormData({ ...formData, whatsapp_number: e.target.value })}
                                 className="w-full bg-white/5 border border-white/10 p-4 text-white text-sm focus:border-white outline-none"
                                 placeholder="+34 ..."
@@ -317,7 +411,7 @@ alter table public.store_settings add column if not exists checkout_type text de
                             </label>
                             <input
                                 type="text"
-                                value={formData.instagram_url}
+                                value={formData.instagram_url || ''}
                                 onChange={e => setFormData({ ...formData, instagram_url: e.target.value })}
                                 className="w-full bg-white/5 border border-white/10 p-4 text-white text-sm focus:border-white outline-none"
                                 placeholder="https://instagram.com/..."
@@ -329,7 +423,7 @@ alter table public.store_settings add column if not exists checkout_type text de
                             </label>
                             <input
                                 type="text"
-                                value={formData.address}
+                                value={formData.address || ''}
                                 onChange={e => setFormData({ ...formData, address: e.target.value })}
                                 className="w-full bg-white/5 border border-white/10 p-4 text-white text-sm focus:border-white outline-none"
                                 placeholder="Calle ..."

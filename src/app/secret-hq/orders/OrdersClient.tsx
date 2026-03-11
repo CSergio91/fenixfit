@@ -4,9 +4,10 @@ import { useState } from 'react'
 import {
     ShoppingBag, Search, MessageCircle, CreditCard, Mail,
     CheckCircle2, XCircle, Clock, Trash2, AlertTriangle,
-    ChevronRight, X, Package, User, Phone, TrendingUp, Loader2
+    ChevronRight, X, Package, User, Phone, TrendingUp, Loader2, Users,
+    Calendar, ChevronDown
 } from "lucide-react"
-import { updateOrderStatus, confirmWhatsappOrder, deleteOrder } from '@/app/actions/admin-actions'
+import { updateOrderStatus, confirmWhatsappOrder, deleteOrder, saveAsCustomer } from '@/app/actions/admin-actions'
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
     pending_whatsapp: { label: 'Esperando Confirmación', color: 'text-amber-400', bg: 'bg-amber-400/10 border border-amber-400/20', icon: MessageCircle },
@@ -24,26 +25,42 @@ const METHOD_ICON: Record<string, any> = {
     email: Mail,
 }
 
-export default function OrdersClient({ initialOrders }: { initialOrders: any[] }) {
+export default function OrdersClient({ initialOrders, currency, role }: { initialOrders: any[], currency: string, role: string | null }) {
     const [orders, setOrders] = useState(initialOrders)
     const [searchQuery, setSearchQuery] = useState('')
     const [statusFilter, setStatusFilter] = useState('all')
     const [selectedOrder, setSelectedOrder] = useState<any>(null)
     const [loadingId, setLoadingId] = useState<string | null>(null)
     const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
+    const [dateRange, setDateRange] = useState<'all' | 'today' | 'this_month' | 'last_month'>('all')
 
     const filteredOrders = orders.filter(o => {
         const matchesSearch =
             o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (o.customer_email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
             (o.customer_name || '').toLowerCase().includes(searchQuery.toLowerCase())
+
         const matchesStatus = statusFilter === 'all' || o.status === statusFilter
-        return matchesSearch && matchesStatus
+
+        const orderDate = new Date(o.created_at)
+        const now = new Date()
+        let matchesDate = true
+
+        if (dateRange === 'today') {
+            matchesDate = orderDate.toDateString() === now.toDateString()
+        } else if (dateRange === 'this_month') {
+            matchesDate = orderDate.getMonth() === now.getMonth() && orderDate.getFullYear() === now.getFullYear()
+        } else if (dateRange === 'last_month') {
+            const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
+            matchesDate = orderDate.getMonth() === lastMonth.getMonth() && orderDate.getFullYear() === lastMonth.getFullYear()
+        }
+
+        return matchesSearch && matchesStatus && matchesDate
     })
 
-    const pendingWaCount = orders.filter(o => o.status === 'pending_whatsapp').length
-    const confirmedCount = orders.filter(o => ['confirmed', 'paid'].includes(o.status)).length
-    const totalRevenue = orders.filter(o => ['confirmed', 'paid', 'shipped'].includes(o.status))
+    const pendingWaCount = filteredOrders.filter(o => o.status === 'pending_whatsapp').length
+    const confirmedCount = filteredOrders.filter(o => ['confirmed', 'paid'].includes(o.status)).length
+    const totalRevenue = filteredOrders.filter(o => ['confirmed', 'paid', 'shipped'].includes(o.status))
         .reduce((s, o) => s + Number(o.total_amount || 0), 0)
 
     const handleStatusChange = async (orderId: string, newStatus: string) => {
@@ -94,6 +111,20 @@ export default function OrdersClient({ initialOrders }: { initialOrders: any[] }
         }
     }
 
+    const handleSaveCustomer = async (orderId: string) => {
+        setLoadingId(orderId)
+        try {
+            await saveAsCustomer(orderId)
+            alert('Cliente guardado exitosamente en la base de datos.')
+            setOrders(prev => prev.map(o => o.id === orderId ? { ...o, is_saved_as_customer: true } : o))
+            if (selectedOrder?.id === orderId) setSelectedOrder((prev: any) => ({ ...prev, is_saved_as_customer: true }))
+        } catch (err: any) {
+            alert('Error al guardar cliente: ' + err.message)
+        } finally {
+            setLoadingId(null)
+        }
+    }
+
     return (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-1000">
 
@@ -114,7 +145,7 @@ export default function OrdersClient({ initialOrders }: { initialOrders: any[] }
                     </div>
                     <div className="bg-white text-black p-5 text-center">
                         <p className="text-black/40 text-[9px] font-black uppercase tracking-widest mb-1">Revenue</p>
-                        <h4 className="font-display text-2xl font-black italic tracking-tighter">${totalRevenue.toFixed(0)}</h4>
+                        <h4 className="font-display text-2xl font-black italic tracking-tighter">{currency === 'EUR' ? '€' : '$'}{totalRevenue.toFixed(0)}</h4>
                     </div>
                 </div>
             </div>
@@ -136,28 +167,47 @@ export default function OrdersClient({ initialOrders }: { initialOrders: any[] }
             )}
 
             {/* ── Filters ── */}
-            <div className="flex flex-col md:flex-row gap-4 bg-[#0a0a0a] border border-white/5 p-5">
-                <div className="flex items-center bg-white/5 px-5 py-3 border border-white/5 flex-1">
-                    <Search size={14} className="text-white/20 shrink-0" />
-                    <input
-                        type="text"
-                        placeholder="Buscar por ID, nombre o email..."
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        className="bg-transparent border-none focus:ring-0 text-[10px] font-black tracking-widest uppercase ml-4 w-full placeholder:text-white/10"
-                    />
+            <div className="bg-[#0a0a0a] border border-white/5 p-8 space-y-6">
+                <div className="flex flex-col lg:flex-row gap-6">
+                    {/* Search */}
+                    <div className="flex items-center bg-white/5 px-6 py-4 border border-white/5 flex-1 group focus-within:border-white/20 transition-all">
+                        <Search size={16} className="text-white/20 shrink-0 group-focus-within:text-white transition-colors" />
+                        <input
+                            type="text"
+                            placeholder="Buscar por ID, nombre o email..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="bg-transparent border-none focus:ring-0 text-[11px] font-black tracking-[0.2em] uppercase ml-4 w-full placeholder:text-white/10"
+                        />
+                    </div>
+
+                    {/* Date Selector */}
+                    <div className="flex items-center space-x-4 bg-white/5 border border-white/5 px-6 py-4">
+                        <Calendar size={16} className="text-white/20" />
+                        <select
+                            value={dateRange}
+                            onChange={(e: any) => setDateRange(e.target.value)}
+                            className="bg-transparent border-none focus:ring-0 text-[10px] font-black uppercase tracking-widest text-white/60 outline-none cursor-pointer"
+                        >
+                            <option value="all">Todo el tiempo</option>
+                            <option value="today">Hoy</option>
+                            <option value="this_month">Este Mes</option>
+                            <option value="last_month">Mes Pasado</option>
+                        </select>
+                    </div>
                 </div>
-                <div className="flex gap-2 flex-wrap">
+
+                <div className="flex flex-wrap gap-2 pt-4 border-t border-white/5">
                     {['all', 'pending_whatsapp', 'confirmed', 'paid', 'shipped', 'cancelled'].map(status => (
                         <button
                             key={status}
                             onClick={() => setStatusFilter(status)}
-                            className={`px-4 py-2 text-[9px] font-black uppercase tracking-widest transition-all border ${statusFilter === status
+                            className={`px-5 py-2.5 text-[9px] font-black uppercase tracking-widest transition-all border ${statusFilter === status
                                 ? 'bg-white text-black border-white'
-                                : 'border-white/10 text-white/30 hover:border-white/30 hover:text-white/60'
+                                : 'border-white/10 text-white/30 hover:border-white/25 hover:text-white/60'
                                 }`}
                         >
-                            {status === 'all' ? 'Todos' : STATUS_CONFIG[status]?.label || status}
+                            {status === 'all' ? 'Todos los Estados' : STATUS_CONFIG[status]?.label || status}
                         </button>
                     ))}
                 </div>
@@ -218,7 +268,7 @@ export default function OrdersClient({ initialOrders }: { initialOrders: any[] }
                                                 </div>
                                             </td>
                                             <td className="px-6 py-5 text-right">
-                                                <p className="font-display font-black text-lg italic">${Number(order.total_amount).toFixed(2)}</p>
+                                                <p className="font-display font-black text-lg italic">{currency === 'EUR' ? '€' : '$'}{Number(order.total_amount).toFixed(2)}</p>
                                             </td>
                                         </tr>
                                     )
@@ -274,17 +324,43 @@ export default function OrdersClient({ initialOrders }: { initialOrders: any[] }
                                         <span className="text-[11px] text-white/50">{selectedOrder.customer_phone}</span>
                                     </div>
                                 )}
-                                {selectedOrder.checkout_method === 'whatsapp' && selectedOrder.customer_phone && (
-                                    <a
-                                        href={`https://wa.me/${selectedOrder.customer_phone?.replace(/[^0-9]/g, '')}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="flex items-center space-x-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500/20 transition-all mt-2"
-                                    >
-                                        <MessageCircle size={12} />
-                                        <span>Abrir WhatsApp</span>
-                                    </a>
+
+                                {selectedOrder.accepts_marketing && (
+                                    <div className="flex items-center space-x-2 text-emerald-400 bg-emerald-400/5 border border-emerald-400/10 px-3 py-1.5 w-fit">
+                                        <CheckCircle2 size={10} />
+                                        <span className="text-[9px] font-black uppercase tracking-widest">Acepta Marketing</span>
+                                    </div>
                                 )}
+
+                                <div className="flex flex-col gap-2 pt-2">
+                                    {selectedOrder.customer_id ? (
+                                        <div className="flex items-center space-x-2 text-white/20 bg-white/5 border border-white/5 px-3 py-2 text-[10px] font-black uppercase tracking-widest">
+                                            <Users size={12} />
+                                            <span>Ya es Cliente de la Tienda</span>
+                                        </div>
+                                    ) : (
+                                        <button
+                                            onClick={() => handleSaveCustomer(selectedOrder.id)}
+                                            disabled={loadingId === selectedOrder.id}
+                                            className="flex items-center space-x-2 bg-white text-black px-3 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-white/80 transition-all"
+                                        >
+                                            <Users size={12} />
+                                            <span>Guardar en Cartera de Clientes</span>
+                                        </button>
+                                    )}
+
+                                    {selectedOrder.checkout_method === 'whatsapp' && selectedOrder.customer_phone && (
+                                        <a
+                                            href={`https://wa.me/${selectedOrder.customer_phone?.replace(/[^0-9]/g, '')}`}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="flex items-center space-x-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500/20 transition-all"
+                                        >
+                                            <MessageCircle size={12} />
+                                            <span>Abrir WhatsApp</span>
+                                        </a>
+                                    )}
+                                </div>
                             </div>
 
                             {/* Shipping address */}
@@ -320,7 +396,7 @@ export default function OrdersClient({ initialOrders }: { initialOrders: any[] }
                                                 Talla: {item.size} · ×{item.quantity}
                                             </p>
                                         </div>
-                                        <p className="text-[12px] font-black">${(item.price_at_time * item.quantity).toFixed(2)}</p>
+                                        <p className="text-[12px] font-black">{currency === 'EUR' ? '€' : '$'}{(item.price_at_time * item.quantity).toFixed(2)}</p>
                                     </div>
                                 ))}
                                 {(selectedOrder.order_items || []).length === 0 && (
@@ -328,7 +404,7 @@ export default function OrdersClient({ initialOrders }: { initialOrders: any[] }
                                 )}
                                 <div className="border-t border-white/5 pt-3 flex justify-between">
                                     <span className="text-[10px] font-black uppercase tracking-widest text-white/30">Total</span>
-                                    <span className="font-display font-black text-xl italic">${Number(selectedOrder.total_amount).toFixed(2)}</span>
+                                    <span className="font-display font-black text-xl italic">{currency === 'EUR' ? '€' : '$'}{Number(selectedOrder.total_amount).toFixed(2)}</span>
                                 </div>
                             </div>
 
@@ -390,34 +466,38 @@ export default function OrdersClient({ initialOrders }: { initialOrders: any[] }
                                 )}
                             </div>
 
-                            {/* Delete */}
-                            {confirmingDelete === selectedOrder.id ? (
-                                <div className="bg-rose-500/10 border border-rose-500/20 p-4 space-y-3">
-                                    <p className="text-rose-400 text-[10px] font-black uppercase tracking-widest flex items-center space-x-2">
-                                        <AlertTriangle size={12} />
-                                        <span>¿Eliminar permanentemente?</span>
-                                    </p>
-                                    <div className="flex gap-2">
+                            {/* Delete - Restricted to Owner */}
+                            {role !== 'moderator' && (
+                                <>
+                                    {confirmingDelete === selectedOrder.id ? (
+                                        <div className="bg-rose-500/10 border border-rose-500/20 p-4 space-y-3">
+                                            <p className="text-rose-400 text-[10px] font-black uppercase tracking-widest flex items-center space-x-2">
+                                                <AlertTriangle size={12} />
+                                                <span>¿Eliminar permanentemente?</span>
+                                            </p>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleDelete(selectedOrder.id)}
+                                                    disabled={loadingId === selectedOrder.id}
+                                                    className="flex-1 bg-rose-500 text-white py-2.5 text-[9px] font-black uppercase tracking-widest hover:bg-rose-400 transition-all disabled:opacity-50"
+                                                >
+                                                    {loadingId === selectedOrder.id ? <Loader2 size={12} className="animate-spin mx-auto" /> : 'Confirmar'}
+                                                </button>
+                                                <button onClick={() => setConfirmingDelete(null)} className="flex-1 border border-white/10 text-white/40 py-2.5 text-[9px] font-black uppercase tracking-widest hover:bg-white/5 transition-all">
+                                                    Cancelar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
                                         <button
-                                            onClick={() => handleDelete(selectedOrder.id)}
-                                            disabled={loadingId === selectedOrder.id}
-                                            className="flex-1 bg-rose-500 text-white py-2.5 text-[9px] font-black uppercase tracking-widest hover:bg-rose-400 transition-all disabled:opacity-50"
+                                            onClick={() => setConfirmingDelete(selectedOrder.id)}
+                                            className="w-full py-3 text-[9px] font-black uppercase tracking-widest border border-white/5 text-white/20 hover:border-rose-500/30 hover:text-rose-400 transition-all flex items-center justify-center space-x-2"
                                         >
-                                            {loadingId === selectedOrder.id ? <Loader2 size={12} className="animate-spin mx-auto" /> : 'Confirmar'}
+                                            <Trash2 size={12} />
+                                            <span>Eliminar Pedido</span>
                                         </button>
-                                        <button onClick={() => setConfirmingDelete(null)} className="flex-1 border border-white/10 text-white/40 py-2.5 text-[9px] font-black uppercase tracking-widest hover:bg-white/5 transition-all">
-                                            Cancelar
-                                        </button>
-                                    </div>
-                                </div>
-                            ) : (
-                                <button
-                                    onClick={() => setConfirmingDelete(selectedOrder.id)}
-                                    className="w-full py-3 text-[9px] font-black uppercase tracking-widest border border-white/5 text-white/20 hover:border-rose-500/30 hover:text-rose-400 transition-all flex items-center justify-center space-x-2"
-                                >
-                                    <Trash2 size={12} />
-                                    <span>Eliminar Pedido</span>
-                                </button>
+                                    )}
+                                </>
                             )}
                         </div>
                     </div>

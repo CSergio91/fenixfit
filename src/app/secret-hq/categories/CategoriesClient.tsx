@@ -51,30 +51,7 @@ function CategoryForm({
     const [name, setName] = useState(initial?.name || '')
     const [slug, setSlug] = useState(initial?.slug || '')
     const [description, setDescription] = useState(initial?.description || '')
-    const [sizes, setSizes] = useState<string[]>(initial?.sizes || [])
-    const [colors, setColors] = useState<CategoryColor[]>(initial?.colors || [])
     const [isActive, setIsActive] = useState(initial?.is_active ?? true)
-    const [customColorName, setCustomColorName] = useState('')
-    const [customColorHex, setCustomColorHex] = useState('#000000')
-    const [showCustom, setShowCustom] = useState(false)
-
-    const toggleSize = (s: string) =>
-        setSizes(prev => prev.includes(s) ? prev.filter(x => x !== s) : [...prev, s])
-
-    const toggleColor = (c: CategoryColor) =>
-        setColors(prev =>
-            prev.find(x => x.hex === c.hex)
-                ? prev.filter(x => x.hex !== c.hex)
-                : [...prev, c]
-        )
-
-    const addCustomColor = () => {
-        if (!customColorName.trim()) return
-        const c = { name: customColorName.trim(), hex: customColorHex }
-        if (!colors.find(x => x.hex === c.hex)) setColors(prev => [...prev, c])
-        setCustomColorName('')
-        setShowCustom(false)
-    }
 
     const handleSubmit = () => {
         if (!name.trim()) return alert('El nombre es obligatorio')
@@ -83,8 +60,8 @@ function CategoryForm({
             name: name.trim(),
             slug: slug || genSlug(name),
             description: description.trim(),
-            sizes,
-            colors,
+            sizes: initial?.sizes || [],
+            colors: initial?.colors || [],
             is_active: isActive,
             sort_order: initial?.sort_order ?? 0,
         })
@@ -125,86 +102,6 @@ function CategoryForm({
                     className="w-full bg-white/[0.03] border border-white/10 px-4 py-3 text-[12px] text-white focus:border-white/30 outline-none resize-none"
                     placeholder="Descripción de la categoría..."
                 />
-            </div>
-
-            {/* Sizes */}
-            <div>
-                <label className="text-[9px] font-black uppercase tracking-[0.3em] text-white/30 block mb-3">Tallas disponibles</label>
-                <div className="flex flex-wrap gap-2">
-                    {ALL_SIZES.map(s => (
-                        <button
-                            key={s}
-                            type="button"
-                            onClick={() => toggleSize(s)}
-                            className={`px-4 py-2 text-[10px] font-black uppercase tracking-widest border transition-all duration-200 ${sizes.includes(s)
-                                ? 'bg-white text-black border-white'
-                                : 'border-white/10 text-white/30 hover:border-white/30 hover:text-white/60'
-                                }`}
-                        >
-                            {s}
-                        </button>
-                    ))}
-                </div>
-                {sizes.length > 0 && (
-                    <p className="text-[9px] text-white/20 mt-2">Seleccionadas: {sizes.join(', ')}</p>
-                )}
-            </div>
-
-            {/* Colors */}
-            <div>
-                <label className="text-[9px] font-black uppercase tracking-[0.3em] text-white/30 block mb-3">Colores disponibles</label>
-                <div className="flex flex-wrap gap-2 mb-3">
-                    {DEFAULT_COLORS.map(c => {
-                        const selected = !!colors.find(x => x.hex === c.hex)
-                        return (
-                            <button
-                                key={c.hex}
-                                type="button"
-                                onClick={() => toggleColor(c)}
-                                title={c.name}
-                                className={`relative flex items-center space-x-2 px-3 py-2 border text-[10px] font-black uppercase tracking-widest transition-all duration-200 ${selected ? 'border-white bg-white/10 text-white' : 'border-white/10 text-white/30 hover:border-white/30'}`}
-                            >
-                                <span className="w-3.5 h-3.5 rounded-full border border-white/20 flex-shrink-0" style={{ backgroundColor: c.hex }} />
-                                <span>{c.name}</span>
-                                {selected && <Check size={10} className="text-white" />}
-                            </button>
-                        )
-                    })}
-                </div>
-
-                {/* Custom color */}
-                {!showCustom ? (
-                    <button onClick={() => setShowCustom(true)} className="text-[9px] font-black uppercase tracking-widest text-white/20 hover:text-white/50 transition-colors flex items-center space-x-2">
-                        <Plus size={10} /><span>Color personalizado</span>
-                    </button>
-                ) : (
-                    <div className="flex items-center space-x-3 mt-2">
-                        <input type="color" value={customColorHex} onChange={e => setCustomColorHex(e.target.value)} className="w-10 h-10 border-0 p-0 cursor-pointer bg-transparent" />
-                        <input
-                            type="text"
-                            value={customColorName}
-                            onChange={e => setCustomColorName(e.target.value)}
-                            placeholder="Nombre del color"
-                            className="bg-white/[0.03] border border-white/10 px-3 py-2 text-[11px] text-white focus:border-white/30 outline-none flex-1"
-                        />
-                        <button onClick={addCustomColor} className="bg-white text-black px-4 py-2 text-[9px] font-black uppercase tracking-widest hover:bg-white/90 transition-all">
-                            Añadir
-                        </button>
-                        <button onClick={() => setShowCustom(false)} className="text-white/20 hover:text-white transition-colors"><X size={14} /></button>
-                    </div>
-                )}
-
-                {colors.filter(c => !DEFAULT_COLORS.find(d => d.hex === c.hex)).length > 0 && (
-                    <div className="flex flex-wrap gap-2 mt-2">
-                        {colors.filter(c => !DEFAULT_COLORS.find(d => d.hex === c.hex)).map(c => (
-                            <span key={c.hex} className="flex items-center space-x-1.5 bg-white/5 border border-white/10 px-3 py-1.5 text-[10px]">
-                                <span className="w-3 h-3 rounded-full" style={{ backgroundColor: c.hex }} />
-                                <span className="text-white/50">{c.name}</span>
-                                <button onClick={() => setColors(prev => prev.filter(x => x.hex !== c.hex))} className="text-white/20 hover:text-rose-400 transition-colors ml-1"><X size={10} /></button>
-                            </span>
-                        ))}
-                    </div>
-                )}
             </div>
 
             {/* Active toggle */}
@@ -331,20 +228,6 @@ export default function CategoriesClient({ initialCategories }: { initialCategor
                                     </div>
                                     <p className="text-[9px] text-white/20 font-mono mt-0.5">/{cat.slug}</p>
                                 </div>
-                                {/* Color swatches preview */}
-                                <div className="hidden sm:flex items-center space-x-1">
-                                    {(cat.colors || []).slice(0, 6).map(c => (
-                                        <div key={c.hex} title={c.name} className="w-4 h-4 rounded-full border border-white/10 shrink-0" style={{ backgroundColor: c.hex }} />
-                                    ))}
-                                    {cat.colors?.length > 6 && <span className="text-[9px] text-white/20">+{cat.colors.length - 6}</span>}
-                                </div>
-                                {/* Sizes preview */}
-                                <div className="hidden md:flex items-center space-x-1">
-                                    {(cat.sizes || []).slice(0, 4).map(s => (
-                                        <span key={s} className="text-[8px] font-black text-white/20 border border-white/5 px-1.5 py-0.5">{s}</span>
-                                    ))}
-                                    {cat.sizes?.length > 4 && <span className="text-[8px] text-white/15">+{cat.sizes.length - 4}</span>}
-                                </div>
                             </div>
                             <div className="flex items-center space-x-2 shrink-0 ml-4">
                                 <button
@@ -378,31 +261,14 @@ export default function CategoriesClient({ initialCategories }: { initialCategor
 
                         {/* Expanded info (not editing) */}
                         {expandedId === cat.id && editingCategory?.id !== cat.id && (
-                            <div className="border-t border-white/5 px-8 py-6 grid grid-cols-2 gap-6 animate-in fade-in duration-200">
-                                <div>
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-3">Tallas</p>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {(cat.sizes || []).map(s => (
-                                            <span key={s} className="text-[9px] font-black text-white border border-white/10 px-2 py-1">{s}</span>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div>
-                                    <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-3">Colores</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {(cat.colors || []).map(c => (
-                                            <div key={c.hex} className="flex items-center space-x-1.5 text-[9px] text-white/40">
-                                                <div className="w-3 h-3 rounded-full border border-white/10" style={{ backgroundColor: c.hex }} />
-                                                <span>{c.name}</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                                {cat.description && (
-                                    <div className="col-span-2">
+                            <div className="border-t border-white/5 px-8 py-6 animate-in fade-in duration-200">
+                                {cat.description ? (
+                                    <div>
                                         <p className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-2">Descripción</p>
                                         <p className="text-[11px] text-white/40">{cat.description}</p>
                                     </div>
+                                ) : (
+                                    <p className="text-[11px] text-white/20 italic">Sin descripción</p>
                                 )}
                             </div>
                         )}

@@ -51,5 +51,15 @@ export const productService = {
         const { data, error } = await query;
         if (error) throw error;
         return data;
+    },
+
+    async getSettings() {
+        const supabase = await createClient();
+        const { data } = await supabase
+            .from('store_settings')
+            .select('*')
+            .eq('id', '00000000-0000-0000-0000-000000000001')
+            .single();
+        return data;
     }
 };

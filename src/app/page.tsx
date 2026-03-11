@@ -5,6 +5,8 @@ import { productService } from "@/services/productService";
 export default async function Home() {
   const products = await productService.getAllProducts();
   const banners = await productService.getMarketingAssets('banner_home');
+  const settings = await productService.getSettings();
+  const currency = settings?.currency || '$';
 
   const justDroppedProducts = products.slice(0, 4);
   const heroBanner = banners[0] || {
@@ -97,9 +99,9 @@ export default async function Home() {
                   <div className="flex justify-between items-center pt-1">
                     <p className="text-[12px] text-muted-light font-medium">{variant?.color_name}</p>
                     <div className="text-right">
-                      <p className={`text-[14px] font-black font-display ${isHotSale ? 'text-red-600' : 'text-primary'}`}>${product.price}</p>
+                      <p className={`text-[14px] font-black font-display ${isHotSale ? 'text-red-600' : 'text-primary'}`}>{currency}{product.price}</p>
                       {isHotSale && (
-                        <p className="text-[10px] text-gray-400 line-through font-bold">${product.original_price}</p>
+                        <p className="text-[10px] text-gray-400 line-through font-bold">{currency}{product.original_price}</p>
                       )}
                     </div>
                   </div>

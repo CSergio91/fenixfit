@@ -14,23 +14,107 @@ import {
 } from "lucide-react";
 import Link from 'next/link';
 
+export const dynamic = "force-dynamic";
+
 export default async function DashboardPage() {
     const supabase = await createClient();
 
-    // Fetch real data from Supabase
-    const { count: productsCount } = await supabase.from('products').select('*', { count: 'exact', head: true });
-    const { data: recentOrders } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(5);
-    const { data: lowStockProducts } = await supabase.from('products').select('*').lt('stock', 10).limit(5);
+    // ── Time Windows ────────────────────────────────────────────────
+    const now = new Date();
+    const startOfToday = new Date(now.setHours(0, 0, 0, 0)).toISOString();
 
-    // Calculate total sales
-    const { data: allOrders } = await supabase.from('orders').select('total_amount');
-    const totalSalesValue = allOrders?.reduce((acc, order) => acc + Number(order.total_amount), 0) || 0;
+    // Monthly comparison
+    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1).toISOString();
+    const endOfLastMonth = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999).toISOString();
+
+    // ── Data Fetching ───────────────────────────────────────────────
+
+    // 1. Products & Stock
+    const { count: productsCount } = await supabase.from('products').select('*', { count: 'exact', head: true });
+    const { count: outOfStockCount } = await supabase.from('products').select('*', { count: 'exact', head: true }).lte('stock', 0);
+    const { data: lowStockProducts } = await supabase.from('products').select('*').lt('stock', 10).order('stock', { ascending: true }).limit(5);
+
+    // 2. Orders & Sales
+    const { data: recentOrders } = await supabase.from('orders').select('*').order('created_at', { ascending: false }).limit(5);
+
+    // Current month orders
+    const { data: currentMonthOrders } = await supabase.from('orders')
+        .select('total_amount')
+        .gte('created_at', startOfCurrentMonth);
+
+    // Last month orders
+    const { data: lastMonthOrders } = await supabase.from('orders')
+        .select('total_amount')
+        .gte('created_at', startOfLastMonth)
+        .lte('created_at', endOfLastMonth);
+
+    // Orders today
+    const { count: ordersToday } = await supabase.from('orders')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', startOfToday);
+
+    // 3. Customers
+    const { count: totalCustomers } = await supabase.from('customers').select('*', { count: 'exact', head: true });
+
+    const { count: currentMonthCustomers } = await supabase.from('customers')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', startOfCurrentMonth);
+
+    const { count: lastMonthCustomers } = await supabase.from('customers')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', startOfLastMonth)
+        .lte('created_at', endOfLastMonth);
+
+    // 4. Currency Settings
+    const { data: settings } = await supabase.from('store_settings').select('currency').single();
+    const currencySymbol = settings?.currency === 'EUR' ? '€' : '$';
+
+    // ── Calculations ────────────────────────────────────────────────
+
+    // Sales Logic
+    const currentSales = currentMonthOrders?.reduce((acc, o) => acc + Number(o.total_amount), 0) || 0;
+    const lastSales = lastMonthOrders?.reduce((acc, o) => acc + Number(o.total_amount), 0) || 0;
+    const salesGrowth = lastSales > 0 ? ((currentSales - lastSales) / lastSales) * 100 : 0;
+
+    // Customer Logic
+    const customerGrowthPercentage = lastMonthCustomers && lastMonthCustomers > 0
+        ? ((currentMonthCustomers! - lastMonthCustomers) / lastMonthCustomers) * 100
+        : (currentMonthCustomers || 0) > 0 ? 100 : 0;
 
     const stats = [
-        { name: 'Ventas Totales', value: `$${totalSalesValue.toFixed(2)}`, change: '+12.5%', icon: CreditCard, color: 'text-emerald-400' },
-        { name: 'Pedidos Activos', value: recentOrders?.length || 0, change: '+3 hoy', icon: ShoppingBag, color: 'text-blue-400' },
-        { name: 'Clientes Totales', value: '47', change: '+18%', icon: Users, color: 'text-purple-400' },
-        { name: 'Stock de Productos', value: productsCount || 0, change: '-2 agotados', icon: Package, color: 'text-amber-400' },
+        {
+            name: 'Ventas del Mes',
+            value: `${currencySymbol}${currentSales.toLocaleString('es-ES', { minimumFractionDigits: 2 })}`,
+            change: `${salesGrowth >= 0 ? '+' : ''}${salesGrowth.toFixed(1)}%`,
+            trend: salesGrowth >= 0 ? 'up' : 'down',
+            icon: CreditCard,
+            color: 'text-emerald-400'
+        },
+        {
+            name: 'Pedidos Hoy',
+            value: ordersToday || 0,
+            change: `+${ordersToday || 0} hoy`,
+            trend: 'up',
+            icon: ShoppingBag,
+            color: 'text-blue-400'
+        },
+        {
+            name: 'Clientes Totales',
+            value: totalCustomers || 0,
+            change: `${customerGrowthPercentage >= 0 ? '+' : ''}${customerGrowthPercentage.toFixed(1)}%`,
+            trend: customerGrowthPercentage >= 0 ? 'up' : 'down',
+            icon: Users,
+            color: 'text-purple-400'
+        },
+        {
+            name: 'Productos Activos',
+            value: productsCount || 0,
+            change: outOfStockCount ? `${outOfStockCount} agotados` : 'Stock al día',
+            trend: outOfStockCount && outOfStockCount > 0 ? 'down' : 'up',
+            icon: Package,
+            color: 'text-amber-400'
+        },
     ];
 
     return (
@@ -61,8 +145,9 @@ export default async function DashboardPage() {
                             <p className="text-white/40 text-[10px] uppercase tracking-widest font-black mb-3">{stat.name}</p>
                             <div className="flex items-end justify-between">
                                 <h3 className="text-4xl font-black font-display italic tracking-tight">{stat.value}</h3>
-                                <span className="text-emerald-400 text-[11px] font-black italic bg-emerald-400/10 px-2 py-1 flex items-center">
-                                    <ArrowUpRight size={14} className="mr-1" />
+                                <span className={`text-[11px] font-black italic px-2 py-1 flex items-center ${stat.trend === 'up' ? 'text-emerald-400 bg-emerald-400/10' : 'text-rose-500 bg-rose-500/10'
+                                    }`}>
+                                    {stat.trend === 'up' ? <ArrowUpRight size={14} className="mr-1" /> : <ArrowDownRight size={14} className="mr-1" />}
                                     {stat.change}
                                 </span>
                             </div>
@@ -96,16 +181,16 @@ export default async function DashboardPage() {
                             <tbody className="divide-y divide-white/5">
                                 {recentOrders?.map((order) => (
                                     <tr key={order.id} className="group hover:bg-white/[0.02] transition-colors">
-                                        <td className="py-6 font-black font-display text-[13px] tracking-tight text-white/60">#{order.id.slice(0, 8)}</td>
+                                        <td className="py-6 font-black font-display text-[13px] tracking-tight text-white/60">#{order.id.slice(0, 8).toUpperCase()}</td>
                                         <td className="py-6">
-                                            <p className="text-[11px] font-bold uppercase tracking-widest">{order.customer_email.split('@')[0]}</p>
+                                            <p className="text-[11px] font-bold uppercase tracking-widest">{order.customer_name || 'Guest'}</p>
                                             <p className="text-[9px] text-white/20 font-medium tracking-tight uppercase">{order.customer_email}</p>
                                         </td>
                                         <td className="py-6">
-                                            <span className={`text-[9px] font-black px-3 py-1.5 uppercase tracking-widest flex items-center w-fit ${order.status === 'paid' ? 'bg-emerald-400/10 text-emerald-400' : 'bg-amber-400/10 text-amber-400'
+                                            <span className={`text-[9px] font-black px-3 py-1.5 uppercase tracking-widest flex items-center w-fit ${['paid', 'confirmed', 'shipped'].includes(order.status) ? 'bg-emerald-400/10 text-emerald-400' : 'bg-amber-400/10 text-amber-400'
                                                 }`}>
-                                                {order.status === 'paid' ? <CheckCircle2 size={12} className="mr-2" /> : <Clock size={12} className="mr-2" />}
-                                                {order.status === 'paid' ? 'Pagado' : 'Pendiente'}
+                                                {['paid', 'confirmed', 'shipped'].includes(order.status) ? <CheckCircle2 size={12} className="mr-2" /> : <Clock size={12} className="mr-2" />}
+                                                {order.status === 'paid' ? 'Pagado' : order.status === 'confirmed' ? 'Confirmado' : order.status === 'shipped' ? 'Enviado' : 'Pendiente'}
                                             </span>
                                         </td>
                                         <td className="py-6 text-right font-black font-display text-[14px]">${Number(order.total_amount).toFixed(2)}</td>
@@ -133,10 +218,15 @@ export default async function DashboardPage() {
                             <div key={product.id} className="p-6 bg-white/5 border border-white/5 hover:border-rose-500/20 transition-all group">
                                 <div className="flex justify-between items-start mb-4">
                                     <p className="text-[10px] font-black uppercase tracking-widest group-hover:text-rose-500 transition-colors">{product.name}</p>
-                                    <span className="text-rose-500 text-[11px] font-black bg-rose-500/10 px-2 py-0.5">{product.stock} UNI</span>
+                                    <span className={`text-[11px] font-black px-2 py-0.5 ${product.stock <= 0 ? 'bg-rose-500 text-white' : 'bg-rose-500/10 text-rose-500'}`}>
+                                        {product.stock} UNI
+                                    </span>
                                 </div>
                                 <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
-                                    <div className="bg-rose-500 h-full w-[20%] animate-pulse"></div>
+                                    <div
+                                        className="bg-rose-500 h-full transition-all duration-1000"
+                                        style={{ width: `${Math.max(5, (product.stock / 10) * 100)}%` }}
+                                    ></div>
                                 </div>
                             </div>
                         ))}

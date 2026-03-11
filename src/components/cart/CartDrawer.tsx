@@ -1,12 +1,14 @@
 "use client";
 
 import { useCartStore } from "@/store/useCartStore";
+import { useCheckoutStore } from "@/store/useCheckoutStore";
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MessageCircle, CreditCard, X, Plus, Minus, ShoppingBag, ArrowRight, Loader2, Check } from "lucide-react";
 import { getPublicSettings, createWhatsappOrder } from "@/app/actions/admin-actions";
+import { useSettingsStore } from "@/store/useSettingsStore";
 
 type CheckoutType = 'stripe' | 'whatsapp' | 'email';
 
@@ -21,27 +23,26 @@ export function CartDrawer() {
     const { isOpen, setIsOpen, items, updateQuantity, removeItem, getCartTotal, clearCart } = useCartStore();
     const [isMounted, setIsMounted] = useState(false);
     const [isCheckingOut, setIsCheckingOut] = useState(false);
-    const [settings, setSettings] = useState<StoreSettings | null>(null);
+    const { settings, fetchSettings } = useSettingsStore();
     const [step, setStep] = useState<'cart' | 'form'>('cart');
 
-    // Customer form fields (for WA/email checkout)
-    const [customerName, setCustomerName] = useState('');
-    const [customerEmail, setCustomerEmail] = useState('');
-    const [customerPhone, setCustomerPhone] = useState('');
-    // Shipping address
-    const [addressStreet, setAddressStreet] = useState('');
-    const [addressCity, setAddressCity] = useState('');
-    const [addressPostal, setAddressPostal] = useState('');
-    const [addressCountry, setAddressCountry] = useState('');
+    const {
+        customerName, customerEmail, customerPhone,
+        addressStreet, addressCity, addressPostal, addressCountry,
+        acceptTerms, acceptMarketing, setField
+    } = useCheckoutStore();
 
     const router = useRouter();
 
     useEffect(() => {
         setIsMounted(true);
-        getPublicSettings().then(s => {
-            if (s) setSettings(s as StoreSettings);
-        });
     }, []);
+
+    useEffect(() => {
+        if (isOpen && isMounted) {
+            fetchSettings();
+        }
+    }, [isOpen, isMounted, fetchSettings]); // Added fetchSettings to dependency array
 
     if (!isMounted) return null;
 
@@ -52,7 +53,7 @@ export function CartDrawer() {
     const buildWhatsappMessage = () => {
         const storeName = settings?.store_name || 'Fenix Fit';
         const lines = items.map(item =>
-            `• ${item.quantity}x ${item.product.name} (${item.variant.colorName ?? item.variant.colorName}, Talla: ${item.size}) — $${(item.product.price * item.quantity).toFixed(2)}`
+            `• ${item.quantity}x ${item.product.name} (${item.variant.colorName ?? item.variant.colorName}, Talla: ${item.size}) — ${settings?.currency || '$'}${(item.product.price * item.quantity).toFixed(2)}`
         );
         const addressLine = [addressStreet, addressCity, addressPostal, addressCountry].filter(Boolean).join(', ');
         const msg = [
@@ -60,7 +61,7 @@ export function CartDrawer() {
             ``,
             ...lines,
             ``,
-            `💰 *Total: $${total.toFixed(2)}*`,
+            `💰 *Total: ${settings?.currency || '$'}${total.toFixed(2)}*`,
             ``,
             `👤 *Datos del cliente:*`,
             `• Nombre: ${customerName}`,
@@ -93,6 +94,7 @@ export function CartDrawer() {
                 body: JSON.stringify({
                     items,
                     customerEmail,
+                    acceptsMarketing: acceptMarketing,
                     utmParams: {
                         source: urlParams.get('utm_source'),
                         medium: urlParams.get('utm_medium'),
@@ -121,6 +123,7 @@ export function CartDrawer() {
                 customer_name: customerName,
                 customer_email: customerEmail,
                 customer_phone: customerPhone,
+                accepts_marketing: acceptMarketing,
                 total_amount: total,
                 shipping_address: {
                     street: addressStreet,
@@ -164,6 +167,10 @@ export function CartDrawer() {
     };
 
     const handleFormSubmit = () => {
+        if (!acceptTerms) {
+            alert('Debes aceptar los términos y condiciones para continuar.');
+            return;
+        }
         if (checkoutType === 'stripe') {
             handleStripeCheckout();
         } else {
@@ -268,7 +275,7 @@ export function CartDrawer() {
                                                         >
                                                             {item.product.name}
                                                         </Link>
-                                                        <p className="text-[13px] font-bold shrink-0">${(item.product.price * item.quantity).toFixed(2)}</p>
+                                                        <p className="text-[13px] font-bold shrink-0">{settings?.currency || '$'}{(item.product.price * item.quantity).toFixed(2)}</p>
                                                     </div>
                                                     <div className="flex items-center space-x-2 text-[10px] text-gray-400 uppercase tracking-wider font-semibold">
                                                         <div className="w-2.5 h-2.5 rounded-full border border-gray-200" style={{ backgroundColor: item.variant.colorHex }} />
@@ -311,7 +318,7 @@ export function CartDrawer() {
                             <div className="border-t border-gray-100 px-8 pb-8 pt-6 space-y-5 bg-white">
                                 <div className="flex justify-between items-center">
                                     <span className="text-xs font-bold uppercase tracking-[0.2em]">Subtotal</span>
-                                    <span className="text-2xl font-black tracking-tighter">${total.toFixed(2)}</span>
+                                    <span className="text-2xl font-black tracking-tighter">{settings?.currency || '$'}{total.toFixed(2)}</span>
                                 </div>
                                 <button
                                     onClick={handleCheckout}
@@ -339,12 +346,12 @@ export function CartDrawer() {
                                             {item.quantity}× {item.product.name}
                                             <span className="text-gray-400 ml-1">({item.size})</span>
                                         </span>
-                                        <span className="font-bold">${(item.product.price * item.quantity).toFixed(2)}</span>
+                                        <span className="font-bold">{settings?.currency || '$'}{(item.product.price * item.quantity).toFixed(2)}</span>
                                     </div>
                                 ))}
                                 <div className="border-t border-gray-200 pt-3 flex justify-between font-black text-sm">
                                     <span>Total</span>
-                                    <span>${total.toFixed(2)}</span>
+                                    <span>{settings?.currency || '$'}{total.toFixed(2)}</span>
                                 </div>
                             </div>
 
@@ -356,7 +363,7 @@ export function CartDrawer() {
                                     <input
                                         type="text"
                                         value={customerName}
-                                        onChange={e => setCustomerName(e.target.value)}
+                                        onChange={e => setField('customerName', e.target.value)}
                                         className="w-full border border-gray-200 px-4 py-3 text-sm focus:border-black outline-none transition-all"
                                         placeholder="Juan García"
                                         required
@@ -367,7 +374,7 @@ export function CartDrawer() {
                                     <input
                                         type="email"
                                         value={customerEmail}
-                                        onChange={e => setCustomerEmail(e.target.value)}
+                                        onChange={e => setField('customerEmail', e.target.value)}
                                         className="w-full border border-gray-200 px-4 py-3 text-sm focus:border-black outline-none transition-all"
                                         placeholder="tu@email.com"
                                         required
@@ -379,7 +386,7 @@ export function CartDrawer() {
                                         <input
                                             type="tel"
                                             value={customerPhone}
-                                            onChange={e => setCustomerPhone(e.target.value)}
+                                            onChange={e => setField('customerPhone', e.target.value)}
                                             className="w-full border border-gray-200 px-4 py-3 text-sm focus:border-black outline-none transition-all"
                                             placeholder="+34 ..."
                                         />
@@ -399,7 +406,7 @@ export function CartDrawer() {
                                             <input
                                                 type="text"
                                                 value={addressStreet}
-                                                onChange={e => setAddressStreet(e.target.value)}
+                                                onChange={e => setField('addressStreet', e.target.value)}
                                                 className="w-full border border-gray-200 px-4 py-3 text-sm focus:border-black outline-none transition-all"
                                                 placeholder="Calle Mayor 42, 3ºB"
                                                 required
@@ -411,7 +418,7 @@ export function CartDrawer() {
                                                 <input
                                                     type="text"
                                                     value={addressCity}
-                                                    onChange={e => setAddressCity(e.target.value)}
+                                                    onChange={e => setField('addressCity', e.target.value)}
                                                     className="w-full border border-gray-200 px-4 py-3 text-sm focus:border-black outline-none transition-all"
                                                     placeholder="Madrid"
                                                     required
@@ -422,7 +429,7 @@ export function CartDrawer() {
                                                 <input
                                                     type="text"
                                                     value={addressPostal}
-                                                    onChange={e => setAddressPostal(e.target.value)}
+                                                    onChange={e => setField('addressPostal', e.target.value)}
                                                     className="w-full border border-gray-200 px-4 py-3 text-sm focus:border-black outline-none transition-all"
                                                     placeholder="28001"
                                                     required
@@ -434,7 +441,7 @@ export function CartDrawer() {
                                             <input
                                                 type="text"
                                                 value={addressCountry}
-                                                onChange={e => setAddressCountry(e.target.value)}
+                                                onChange={e => setField('addressCountry', e.target.value)}
                                                 className="w-full border border-gray-200 px-4 py-3 text-sm focus:border-black outline-none transition-all"
                                                 placeholder="España"
                                                 required
@@ -456,6 +463,40 @@ export function CartDrawer() {
                                         </div>
                                     </div>
                                 )}
+
+                                {/* Consents */}
+                                <div className="pt-4 space-y-4 border-t border-gray-100">
+                                    <label className="flex items-start space-x-3 cursor-pointer group">
+                                        <div className="relative flex items-center mt-0.5">
+                                            <input
+                                                type="checkbox"
+                                                checked={acceptTerms}
+                                                onChange={e => setField('acceptTerms', e.target.checked)}
+                                                className="peer appearance-none w-5 h-5 border-2 border-gray-200 checked:bg-black checked:border-black transition-all"
+                                                required
+                                            />
+                                            <Check className="absolute w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 left-0.5 pointer-events-none transition-opacity" />
+                                        </div>
+                                        <span className="text-[11px] text-gray-500 font-medium leading-relaxed group-hover:text-black transition-colors">
+                                            He leído y acepto los <Link href="/privacidad" className="underline font-bold">Términos y Condiciones</Link> así como la política de privacidad. *
+                                        </span>
+                                    </label>
+
+                                    <label className="flex items-start space-x-3 cursor-pointer group">
+                                        <div className="relative flex items-center mt-0.5">
+                                            <input
+                                                type="checkbox"
+                                                checked={acceptMarketing}
+                                                onChange={e => setField('acceptMarketing', e.target.checked)}
+                                                className="peer appearance-none w-5 h-5 border-2 border-gray-200 checked:bg-black checked:border-black transition-all"
+                                            />
+                                            <Check className="absolute w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 left-0.5 pointer-events-none transition-opacity" />
+                                        </div>
+                                        <span className="text-[11px] text-gray-500 font-medium leading-relaxed group-hover:text-black transition-colors">
+                                            Quiero recibir correos de Fenixfit con nuevas ofertas, lanzamientos y productos exclusivos.
+                                        </span>
+                                    </label>
+                                </div>
                             </div>
                         </div>
 

@@ -11,22 +11,43 @@ import {
     ChevronRight,
     Edit3,
     Eye,
+    X,
     Trash2,
-    Megaphone
+    Megaphone,
+    Save,
+    Loader2
 } from "lucide-react"
 import MarketingModal from '@/components/admin/MarketingModal'
 import DeleteConfirmModal from '@/components/admin/DeleteConfirmModal'
-import { deleteMarketingAsset } from '@/app/actions/admin-actions'
+import { deleteMarketingAsset, upsertSettings } from '@/app/actions/admin-actions'
+import { useSettingsStore } from '@/store/useSettingsStore'
 
 interface MarketingClientProps {
     initialAssets: any[]
+    products: any[]
+    initialSettings: any
 }
 
-export default function MarketingClient({ initialAssets }: MarketingClientProps) {
+export default function MarketingClient({ initialAssets, products, initialSettings }: MarketingClientProps) {
     const [assets, setAssets] = useState(initialAssets)
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
     const [selectedAsset, setSelectedAsset] = useState<any>(null)
+    const [announcement, setAnnouncement] = useState(initialSettings?.announcement_text || '')
+    const [savingSettings, setSavingSettings] = useState(false)
+    const [settingsSaved, setSettingsSaved] = useState(false)
+    const fetchSettings = useSettingsStore(state => state.fetchSettings)
+
+    const handleMarketingSuccess = (updatedAsset: any) => {
+        setAssets(prev => {
+            const exists = prev.find(a => a.id === updatedAsset.id)
+            if (exists) {
+                return prev.map(a => a.id === updatedAsset.id ? updatedAsset : a)
+            } else {
+                return [updatedAsset, ...prev]
+            }
+        })
+    }
 
     const handleAdd = () => {
         setSelectedAsset(null)
@@ -50,6 +71,23 @@ export default function MarketingClient({ initialAssets }: MarketingClientProps)
         }
     }
 
+    const handleSaveAnnouncement = async () => {
+        setSavingSettings(true)
+        try {
+            await upsertSettings({
+                ...initialSettings,
+                announcement_text: announcement
+            })
+            setSettingsSaved(true)
+            await fetchSettings()
+            setTimeout(() => setSettingsSaved(false), 3000)
+        } catch (err) {
+            alert('Error al guardar el anuncio')
+        } finally {
+            setSavingSettings(false)
+        }
+    }
+
     return (
         <div className="space-y-16 animate-in fade-in slide-in-from-bottom-6 duration-1000">
             {/* Header Section */}
@@ -70,6 +108,36 @@ export default function MarketingClient({ initialAssets }: MarketingClientProps)
                     <Plus size={18} />
                     <span>Nueva Campaña</span>
                 </button>
+            </div>
+
+            {/* Announcement Bar Control */}
+            <div className="bg-[#0a0a0a] border border-white/5 p-10">
+                <div className="flex flex-col md:flex-row gap-10">
+                    <div className="flex-1">
+                        <label className="text-white/20 text-[10px] uppercase tracking-widest font-black mb-4 flex items-center">
+                            <Megaphone size={14} className="mr-3 text-emerald-400" /> Barra de Anuncio Global
+                        </label>
+                        <p className="text-white/20 text-[10px] mb-8 uppercase tracking-wider">Configura el mensaje que aparece en la parte superior de toda la tienda.</p>
+                        <input
+                            type="text"
+                            value={announcement}
+                            onChange={e => setAnnouncement(e.target.value)}
+                            className="w-full bg-black/40 border border-white/10 p-5 text-white text-[11px] uppercase font-black tracking-widest outline-none focus:border-white transition-all"
+                            placeholder="Ej: ENVÍO GRATUITO EN PEDIDOS SUPERIORES A 50€"
+                        />
+                    </div>
+                    <div className="flex items-end">
+                        <button
+                            onClick={handleSaveAnnouncement}
+                            disabled={savingSettings}
+                            className={`w-full md:w-auto px-10 py-5 text-[10px] font-black uppercase tracking-[0.2em] flex items-center justify-center space-x-3 transition-all ${settingsSaved ? 'bg-emerald-500 text-black' : 'bg-white/5 border border-white/10 text-white hover:bg-white hover:text-black'
+                                }`}
+                        >
+                            {savingSettings ? <Loader2 size={16} className="animate-spin" /> : settingsSaved ? <CheckCircle2 size={16} /> : <Save size={16} />}
+                            <span>{settingsSaved ? 'SINCRONIZADO ✓' : 'ACTUALIZAR BARRA'}</span>
+                        </button>
+                    </div>
+                </div>
             </div>
 
             {/* Assets Grid */}
@@ -114,6 +182,20 @@ export default function MarketingClient({ initialAssets }: MarketingClientProps)
                                             <ChevronRight size={12} className="ml-2" />
                                         </p>
                                     </div>
+
+                                    {asset.product_id && (
+                                        <div>
+                                            <label className="text-white/10 text-[9px] uppercase tracking-[0.3em] font-black mb-3 block">Producto en Promoción</label>
+                                            <div className="bg-white/5 border border-white/5 p-4 flex items-center justify-between">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-white/60">
+                                                    {products.find(p => p.id === asset.product_id)?.name || 'Producto Desconocido'}
+                                                </span>
+                                                <span className="text-emerald-400 text-[10px] font-black">
+                                                    SAVE PRICE: {asset.sale_price}€
+                                                </span>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="space-y-10">
@@ -162,7 +244,9 @@ export default function MarketingClient({ initialAssets }: MarketingClientProps)
             {isModalOpen && (
                 <MarketingModal
                     asset={selectedAsset}
+                    products={products}
                     onClose={() => setIsModalOpen(false)}
+                    onSuccess={handleMarketingSuccess}
                 />
             )}
 

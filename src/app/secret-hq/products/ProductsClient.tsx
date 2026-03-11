@@ -10,7 +10,7 @@ import ProductModal from '@/components/admin/ProductModal'
 import DeleteConfirmModal from '@/components/admin/DeleteConfirmModal'
 import { deleteProduct, adjustStock } from '@/app/actions/admin-actions'
 
-export default function ProductsClient({ initialProducts }: { initialProducts: any[] }) {
+export default function ProductsClient({ initialProducts, categories, currency, role }: { initialProducts: any[], categories: any[], currency: string, role: string | null }) {
     const [products, setProducts] = useState<any[]>(initialProducts)
     const [isProductModalOpen, setIsProductModalOpen] = useState(false)
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
@@ -18,6 +18,17 @@ export default function ProductsClient({ initialProducts }: { initialProducts: a
     const [searchQuery, setSearchQuery] = useState('')
     const [stockLoading, setStockLoading] = useState<string | null>(null)
     const [isPending, startTransition] = useTransition()
+
+    const handleProductSuccess = (updatedProduct: any) => {
+        setProducts(prev => {
+            const exists = prev.find(p => p.id === updatedProduct.id)
+            if (exists) {
+                return prev.map(p => p.id === updatedProduct.id ? updatedProduct : p)
+            } else {
+                return [updatedProduct, ...prev]
+            }
+        })
+    }
 
     const filteredProducts = products.filter(p =>
         p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -126,18 +137,20 @@ export default function ProductsClient({ initialProducts }: { initialProducts: a
                                 >
                                     <Edit3 size={14} />
                                 </button>
-                                <button
-                                    onClick={() => handleDeleteClick(product)}
-                                    className="w-9 h-9 bg-rose-500 text-white flex items-center justify-center shadow-2xl hover:bg-black transition-all"
-                                >
-                                    <Trash2 size={14} />
-                                </button>
+                                {role !== 'moderator' && (
+                                    <button
+                                        onClick={() => handleDeleteClick(product)}
+                                        className="w-9 h-9 bg-rose-500 text-white flex items-center justify-center shadow-2xl hover:bg-black transition-all"
+                                    >
+                                        <Trash2 size={14} />
+                                    </button>
+                                )}
                             </div>
 
                             {/* Stock badge */}
                             <div className="absolute bottom-3 left-3">
                                 <span className={`text-[8px] font-black px-2 py-1 uppercase tracking-widest ${product.stock === 0 ? 'bg-rose-500 text-white' :
-                                        product.stock < 10 ? 'bg-amber-400 text-black' : 'bg-emerald-400 text-black'
+                                    product.stock < 10 ? 'bg-amber-400 text-black' : 'bg-emerald-400 text-black'
                                     }`}>
                                     {product.stock === 0 ? 'Agotado' : product.stock < 10 ? `Solo ${product.stock} left` : 'En Stock'}
                                 </span>
@@ -149,7 +162,7 @@ export default function ProductsClient({ initialProducts }: { initialProducts: a
                             <div>
                                 <div className="flex justify-between items-start mb-2">
                                     <p className="text-white/20 text-[9px] font-black uppercase tracking-widest">{product.category}</p>
-                                    <p className="font-display font-black text-base italic">${Number(product.price).toFixed(2)}</p>
+                                    <p className="font-display font-black text-base italic">{currency === 'EUR' ? '€' : '$'}{Number(product.price).toFixed(2)}</p>
                                 </div>
                                 <h3 className="text-[13px] font-black uppercase tracking-tight leading-tight mb-4 group-hover:text-white transition-colors">
                                     {product.name}
@@ -157,21 +170,23 @@ export default function ProductsClient({ initialProducts }: { initialProducts: a
                             </div>
 
                             {/* Color dots */}
-                            {product.product_variants?.length > 1 && (
-                                <div className="flex items-center space-x-1.5 mb-4">
-                                    {product.product_variants.slice(0, 6).map((v: any, idx: number) => (
-                                        <div
-                                            key={idx}
-                                            className="w-3 h-3 rounded-full border border-white/10"
-                                            style={{ backgroundColor: v.color_hex }}
-                                            title={v.color_name}
-                                        />
-                                    ))}
-                                    {product.product_variants.length > 6 && (
-                                        <span className="text-[9px] text-white/30 font-black">+{product.product_variants.length - 6}</span>
-                                    )}
-                                </div>
-                            )}
+                            {
+                                product.product_variants?.length > 1 && (
+                                    <div className="flex items-center space-x-1.5 mb-4">
+                                        {product.product_variants.slice(0, 6).map((v: any, idx: number) => (
+                                            <div
+                                                key={idx}
+                                                className="w-3 h-3 rounded-full border border-white/10"
+                                                style={{ backgroundColor: v.color_hex }}
+                                                title={v.color_name}
+                                            />
+                                        ))}
+                                        {product.product_variants.length > 6 && (
+                                            <span className="text-[9px] text-white/30 font-black">+{product.product_variants.length - 6}</span>
+                                        )}
+                                    </div>
+                                )
+                            }
 
                             {/* ── Stock Control ── */}
                             <div className="border-t border-white/5 pt-4 space-y-3">
@@ -219,8 +234,8 @@ export default function ProductsClient({ initialProducts }: { initialProducts: a
                                             onClick={() => handleStockChange(product.id, delta)}
                                             disabled={stockLoading === product.id || (delta < 0 && product.stock + delta < 0)}
                                             className={`flex-1 py-1.5 text-[8px] font-black uppercase tracking-widest border transition-all disabled:opacity-20 disabled:cursor-not-allowed ${delta < 0
-                                                    ? 'border-white/5 text-white/20 hover:border-rose-500/30 hover:text-rose-400'
-                                                    : 'border-white/5 text-white/20 hover:border-emerald-500/30 hover:text-emerald-400'
+                                                ? 'border-white/5 text-white/20 hover:border-rose-500/30 hover:text-rose-400'
+                                                : 'border-white/5 text-white/20 hover:border-emerald-500/30 hover:text-emerald-400'
                                                 }`}
                                         >
                                             {delta > 0 ? `+${delta}` : delta}
@@ -228,28 +243,32 @@ export default function ProductsClient({ initialProducts }: { initialProducts: a
                                     ))}
                                 </div>
                             </div>
+                            {/* Top Border Accent */}
+                            <div className="absolute top-0 left-0 w-0 h-[1px] bg-white group-hover:w-full transition-all duration-1000" />
                         </div>
-
-                        {/* Top Border Accent */}
-                        <div className="absolute top-0 left-0 w-0 h-[1px] bg-white group-hover:w-full transition-all duration-1000" />
                     </div>
                 ))}
             </div>
 
-            {filteredProducts.length === 0 && (
-                <div className="py-40 flex flex-col items-center justify-center text-center">
-                    <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-10 border border-white/5 animate-pulse">
-                        <Package size={40} className="text-white/20" />
+            {
+                filteredProducts.length === 0 && (
+                    <div className="py-40 flex flex-col items-center justify-center text-center">
+                        <div className="w-24 h-24 bg-white/5 rounded-full flex items-center justify-center mb-10 border border-white/5 animate-pulse">
+                            <Package size={40} className="text-white/20" />
+                        </div>
+                        <h3 className="font-display text-4xl font-black italic tracking-tighter uppercase mb-4">Base Vacía</h3>
+                        <p className="text-white/20 text-[10px] uppercase tracking-widest max-w-sm">No se encontraron registros con ese criterio.</p>
                     </div>
-                    <h3 className="font-display text-4xl font-black italic tracking-tighter uppercase mb-4">Base Vacía</h3>
-                    <p className="text-white/20 text-[10px] uppercase tracking-widest max-w-sm">No se encontraron registros con ese criterio.</p>
-                </div>
-            )}
+                )
+            }
 
             {isProductModalOpen && (
                 <ProductModal
                     product={selectedProduct}
+                    categories={categories}
+                    currency={currency}
                     onClose={() => setIsProductModalOpen(false)}
+                    onSuccess={handleProductSuccess}
                 />
             )}
             {isDeleteModalOpen && (

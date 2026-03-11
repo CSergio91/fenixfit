@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
 import { useCartStore } from "@/store/useCartStore";
+import { useSettingsStore } from "@/store/useSettingsStore";
 import { DbProduct } from "@/services/productService";
 
 export default function ProductClient({ product }: { product: DbProduct }) {
@@ -11,6 +12,8 @@ export default function ProductClient({ product }: { product: DbProduct }) {
     const [selectedSize, setSelectedSize] = useState<string | null>(null);
     const [activeImage, setActiveImage] = useState(selectedVariant?.main_image || "");
     const addItem = useCartStore((state) => state.addItem);
+    const settings = useSettingsStore((state) => state.settings);
+    const currency = settings?.currency || '$';
 
     if (!product || !selectedVariant) return null;
 
@@ -87,9 +90,9 @@ export default function ProductClient({ product }: { product: DbProduct }) {
                         </div>
                         <h1 className="font-display text-4xl md:text-5xl font-extrabold mb-4 tracking-tighter leading-tight uppercase italic">{product.name}</h1>
                         <div className="flex items-center space-x-6">
-                            <span className="text-2xl md:text-3xl font-black font-display text-primary">${product.price}</span>
+                            <span className="text-2xl md:text-3xl font-black font-display text-primary">{currency}{product.price}</span>
                             {product.original_price && (
-                                <span className="text-lg text-muted-light line-through font-medium">${product.original_price}</span>
+                                <span className="text-lg text-muted-light line-through font-medium">{currency}{product.original_price}</span>
                             )}
                         </div>
                     </div>

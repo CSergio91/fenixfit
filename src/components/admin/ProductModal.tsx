@@ -41,7 +41,10 @@ const PRESET_COLORS = [
 
 interface ProductModalProps {
     product?: any
+    categories: any[]
+    currency: string
     onClose: () => void
+    onSuccess?: (product: any) => void
 }
 
 // ─── ImageField: sub-component with bucket picker trigger ───────────────────
@@ -100,7 +103,7 @@ function ImageField({
 }
 
 // ─── Main Modal ──────────────────────────────────────────────────────────────
-export default function ProductModal({ product, onClose }: ProductModalProps) {
+export default function ProductModal({ product, categories, currency, onClose }: ProductModalProps) {
     const [loading, setLoading] = useState(false)
     const [activeVariantIdx, setActiveVariantIdx] = useState(0)
     const [showColorPalette, setShowColorPalette] = useState<number | null>(null)
@@ -111,7 +114,7 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
         price: product?.price || 0,
         original_price: product?.original_price || 0,
         stock: product?.stock || 0,
-        category: product?.category || 'Leggings',
+        category: product?.category || (categories && categories.length > 0 ? categories[0].name : 'Leggings'),
         description: product?.description || '',
         sizes: product?.sizes || ['XS', 'S', 'M', 'L', 'XL'],
         features: product?.features || [],
@@ -174,7 +177,11 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
         e.preventDefault()
         setLoading(true)
         try {
-            await upsertProduct(formData, variants)
+            const updated = await upsertProduct(formData, variants)
+            if (onSuccess) {
+                // Return full data for UI update
+                onSuccess({ ...updated, product_variants: variants })
+            }
             onClose()
         } catch (err) {
             console.error(err)
@@ -236,10 +243,10 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
                             <div>
                                 <label className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-2 block">Precio *</label>
                                 <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 font-black text-sm">$</span>
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 font-black text-sm">{currency === 'EUR' ? '€' : '$'}</span>
                                     <input
                                         type="number" step="0.01" required value={formData.price}
-                                        onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) })}
+                                        onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) || 0 })}
                                         className="w-full bg-white/5 border border-white/10 pl-7 pr-3 py-3 text-white text-sm font-black focus:border-white outline-none"
                                     />
                                 </div>
@@ -247,10 +254,10 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
                             <div>
                                 <label className="text-[9px] font-black uppercase tracking-widest text-white/20 mb-2 block">Precio Tachado</label>
                                 <div className="relative">
-                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 font-black text-sm">$</span>
+                                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/30 font-black text-sm">{currency === 'EUR' ? '€' : '$'}</span>
                                     <input
                                         type="number" step="0.01" value={formData.original_price}
-                                        onChange={e => setFormData({ ...formData, original_price: parseFloat(e.target.value) })}
+                                        onChange={e => setFormData({ ...formData, original_price: parseFloat(e.target.value) || 0 })}
                                         className="w-full bg-white/5 border border-white/10 pl-7 pr-3 py-3 text-white/50 text-sm focus:border-white outline-none"
                                     />
                                 </div>
@@ -274,11 +281,18 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
                                     onChange={e => setFormData({ ...formData, category: e.target.value })}
                                     className="w-full bg-[#0d0d0d] border border-white/10 p-3 text-white text-sm focus:border-white outline-none cursor-pointer"
                                 >
-                                    <option value="Leggings">Leggings</option>
-                                    <option value="Tops">Tops</option>
-                                    <option value="Shorts">Shorts</option>
-                                    <option value="Accessories">Accesorios</option>
-                                    <option value="Sets">Sets</option>
+                                    {categories.map((cat: any) => (
+                                        <option key={cat.id} value={cat.name}>{cat.name}</option>
+                                    ))}
+                                    {categories.length === 0 && (
+                                        <>
+                                            <option value="Leggings">Leggings</option>
+                                            <option value="Tops">Tops</option>
+                                            <option value="Shorts">Shorts</option>
+                                            <option value="Accessories">Accesorios</option>
+                                            <option value="Sets">Sets</option>
+                                        </>
+                                    )}
                                 </select>
                             </div>
                         </div>
@@ -311,8 +325,8 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
                                             type="button"
                                             onClick={() => toggleSize(size)}
                                             className={`px-3 py-2 text-[10px] font-black uppercase tracking-widest transition-all duration-200 border ${active
-                                                    ? 'bg-white text-black border-white shadow-[0_0_12px_rgba(255,255,255,0.2)]'
-                                                    : 'bg-transparent text-white/30 border-white/10 hover:border-white/40 hover:text-white/60'
+                                                ? 'bg-white text-black border-white shadow-[0_0_12px_rgba(255,255,255,0.2)]'
+                                                : 'bg-transparent text-white/30 border-white/10 hover:border-white/40 hover:text-white/60'
                                                 }`}
                                         >
                                             {size}
@@ -376,8 +390,8 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
                                     type="button"
                                     onClick={() => setActiveVariantIdx(i)}
                                     className={`flex items-center space-x-2 px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-all whitespace-nowrap border-b-2 ${activeVariantIdx === i
-                                            ? 'border-white text-white'
-                                            : 'border-transparent text-white/30 hover:text-white/60'
+                                        ? 'border-white text-white'
+                                        : 'border-transparent text-white/30 hover:text-white/60'
                                         }`}
                                 >
                                     <div
@@ -432,13 +446,13 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
                                     <div className="flex items-center space-x-2 bg-white/5 border border-white/10 px-3 py-3">
                                         <input
                                             type="color"
-                                            value={activeVariant?.color_hex}
+                                            value={activeVariant?.color_hex || '#000000'}
                                             onChange={e => changeVariant(activeVariantIdx, 'color_hex', e.target.value)}
                                             className="w-6 h-6 cursor-pointer bg-transparent border-none outline-none p-0"
                                         />
                                         <input
                                             type="text"
-                                            value={activeVariant?.color_hex?.toUpperCase()}
+                                            value={(activeVariant?.color_hex || '').toUpperCase()}
                                             onChange={e => changeVariant(activeVariantIdx, 'color_hex', e.target.value)}
                                             className="w-20 bg-transparent border-none text-white/60 text-[10px] font-black uppercase tracking-widest outline-none"
                                             placeholder="#000000"
@@ -457,8 +471,8 @@ export default function ProductModal({ product, onClose }: ProductModalProps) {
                                                 onClick={() => applyPresetColor(activeVariantIdx, preset)}
                                                 title={preset.name}
                                                 className={`w-7 h-7 rounded-sm border-2 transition-all hover:scale-110 hover:shadow-lg ${activeVariant?.color_hex === preset.hex
-                                                        ? 'border-white scale-110 shadow-[0_0_10px_rgba(255,255,255,0.4)]'
-                                                        : 'border-white/20 hover:border-white/60'
+                                                    ? 'border-white scale-110 shadow-[0_0_10px_rgba(255,255,255,0.4)]'
+                                                    : 'border-white/20 hover:border-white/60'
                                                     }`}
                                                 style={{ backgroundColor: preset.hex }}
                                             />
