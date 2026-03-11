@@ -2,173 +2,402 @@
 
 import { useState } from 'react'
 import {
-    ShoppingBag,
-    Search,
-    ExternalLink,
-    Clock,
-    CheckCircle2,
-    XCircle,
-    Mail,
-    Filter,
-    TrendingUp,
-    ChevronDown,
-    Loader2
+    ShoppingBag, Search, MessageCircle, CreditCard, Mail,
+    CheckCircle2, XCircle, Clock, Trash2, AlertTriangle,
+    ChevronRight, X, Package, User, Phone, TrendingUp, Loader2
 } from "lucide-react"
-import { updateOrderStatus } from '@/app/actions/admin-actions'
+import { updateOrderStatus, confirmWhatsappOrder, deleteOrder } from '@/app/actions/admin-actions'
 
-interface OrdersClientProps {
-    initialOrders: any[]
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: any }> = {
+    pending_whatsapp: { label: 'Esperando Confirmación', color: 'text-amber-400', bg: 'bg-amber-400/10 border border-amber-400/20', icon: MessageCircle },
+    pending: { label: 'Pendiente', color: 'text-amber-400', bg: 'bg-amber-400/10 border border-amber-400/20', icon: Clock },
+    confirmed: { label: 'Confirmado', color: 'text-emerald-400', bg: 'bg-emerald-400/10 border border-emerald-400/20', icon: CheckCircle2 },
+    paid: { label: 'Pagado', color: 'text-emerald-400', bg: 'bg-emerald-400/10 border border-emerald-400/20', icon: CheckCircle2 },
+    shipped: { label: 'Enviado', color: 'text-blue-400', bg: 'bg-blue-400/10 border border-blue-400/20', icon: Package },
+    cancelled: { label: 'Cancelado', color: 'text-rose-500', bg: 'bg-rose-500/10 border border-rose-500/20', icon: XCircle },
+    rejected: { label: 'Rechazado', color: 'text-rose-500', bg: 'bg-rose-500/10 border border-rose-500/20', icon: XCircle },
 }
 
-export default function OrdersClient({ initialOrders }: OrdersClientProps) {
+const METHOD_ICON: Record<string, any> = {
+    whatsapp: MessageCircle,
+    stripe: CreditCard,
+    email: Mail,
+}
+
+export default function OrdersClient({ initialOrders }: { initialOrders: any[] }) {
     const [orders, setOrders] = useState(initialOrders)
     const [searchQuery, setSearchQuery] = useState('')
-    const [updatingId, setUpdatingId] = useState<string | null>(null)
+    const [statusFilter, setStatusFilter] = useState('all')
+    const [selectedOrder, setSelectedOrder] = useState<any>(null)
+    const [loadingId, setLoadingId] = useState<string | null>(null)
+    const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
 
-    const filteredOrders = orders.filter(o =>
-        o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        o.customer_email.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const filteredOrders = orders.filter(o => {
+        const matchesSearch =
+            o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (o.customer_email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (o.customer_name || '').toLowerCase().includes(searchQuery.toLowerCase())
+        const matchesStatus = statusFilter === 'all' || o.status === statusFilter
+        return matchesSearch && matchesStatus
+    })
+
+    const pendingWaCount = orders.filter(o => o.status === 'pending_whatsapp').length
+    const confirmedCount = orders.filter(o => ['confirmed', 'paid'].includes(o.status)).length
+    const totalRevenue = orders.filter(o => ['confirmed', 'paid', 'shipped'].includes(o.status))
+        .reduce((s, o) => s + Number(o.total_amount || 0), 0)
 
     const handleStatusChange = async (orderId: string, newStatus: string) => {
-        setUpdatingId(orderId)
+        setLoadingId(orderId)
         try {
-            await updateOrderStatus(orderId, newStatus)
+            if (newStatus === 'confirmed' && orders.find(o => o.id === orderId)?.checkout_method === 'whatsapp') {
+                await confirmWhatsappOrder(orderId)
+            } else {
+                await updateOrderStatus(orderId, newStatus)
+            }
             setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o))
-        } catch (error) {
-            alert('Error al actualizar el estado')
+            if (selectedOrder?.id === orderId) setSelectedOrder((prev: any) => ({ ...prev, status: newStatus }))
+        } catch {
+            alert('Error al actualizar estado')
         } finally {
-            setUpdatingId(null)
+            setLoadingId(null)
+        }
+    }
+
+    const handleConfirm = async (orderId: string) => {
+        setLoadingId(orderId)
+        try {
+            await confirmWhatsappOrder(orderId)
+            setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: 'confirmed' } : o))
+            if (selectedOrder?.id === orderId) setSelectedOrder((prev: any) => ({ ...prev, status: 'confirmed' }))
+        } catch (err: any) {
+            alert('Error al confirmar: ' + err.message)
+        } finally {
+            setLoadingId(null)
+        }
+    }
+
+    const handleReject = async (orderId: string) => {
+        await handleStatusChange(orderId, 'rejected')
+    }
+
+    const handleDelete = async (orderId: string) => {
+        setLoadingId(orderId)
+        try {
+            await deleteOrder(orderId)
+            setOrders(prev => prev.filter(o => o.id !== orderId))
+            if (selectedOrder?.id === orderId) setSelectedOrder(null)
+            setConfirmingDelete(null)
+        } catch (err: any) {
+            alert('Error al eliminar: ' + err.message)
+        } finally {
+            setLoadingId(null)
         }
     }
 
     return (
-        <div className="space-y-16 animate-in fade-in slide-in-from-bottom-6 duration-1000">
-            {/* Header Info */}
-            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-10 border-b border-white/5 pb-20">
-                <div className="max-w-xl">
-                    <span className="text-white/20 text-[10px] uppercase tracking-[0.5em] font-black mb-6 block">Transactions // Fulfilment</span>
-                    <h1 className="font-display text-6xl md:text-8xl font-black italic tracking-tightest uppercase leading-none mb-8">
-                        Pedidos
-                    </h1>
-                    <p className="text-white/20 text-[11px] font-bold uppercase tracking-widest leading-relaxed">
-                        Gestión de pedidos, logística de envíos y conciliación de pagos en tiempo real.
-                    </p>
+        <div className="space-y-10 animate-in fade-in slide-in-from-bottom-6 duration-1000">
+
+            {/* ── Header ── */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 border-b border-white/5 pb-16">
+                <div>
+                    <span className="text-white/20 text-[10px] uppercase tracking-[0.5em] font-black mb-4 block">Transactions // Fulfilment</span>
+                    <h1 className="font-display text-6xl md:text-8xl font-black italic tracking-tighter uppercase leading-none">Pedidos</h1>
                 </div>
-                <div className="grid grid-cols-2 gap-4 w-full md:w-auto">
-                    <div className="bg-white/5 border border-white/10 p-6 flex flex-col items-center justify-center min-w-[150px]">
-                        <p className="text-white/30 text-[9px] font-black uppercase tracking-[0.2em] mb-2">Total Pedidos</p>
-                        <h4 className="font-display text-4xl font-black italic tracking-tighter">{orders.length}</h4>
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="bg-amber-400/5 border border-amber-400/20 p-5 text-center min-w-[110px]">
+                        <p className="text-amber-400/60 text-[9px] font-black uppercase tracking-widest mb-1">En Espera WA</p>
+                        <h4 className="font-display text-3xl font-black italic text-amber-400">{pendingWaCount}</h4>
                     </div>
-                    <div className="bg-white text-black p-6 flex flex-col items-center justify-center min-w-[150px]">
-                        <p className="text-black/40 text-[9px] font-black uppercase tracking-[0.2em] mb-2">Pagados</p>
-                        <h4 className="font-display text-4xl font-black italic tracking-tighter">
-                            {orders.filter(o => o.status === 'paid').length}
-                        </h4>
+                    <div className="bg-emerald-400/5 border border-emerald-400/10 p-5 text-center">
+                        <p className="text-emerald-400/60 text-[9px] font-black uppercase tracking-widest mb-1">Confirmados</p>
+                        <h4 className="font-display text-3xl font-black italic text-emerald-400">{confirmedCount}</h4>
+                    </div>
+                    <div className="bg-white text-black p-5 text-center">
+                        <p className="text-black/40 text-[9px] font-black uppercase tracking-widest mb-1">Revenue</p>
+                        <h4 className="font-display text-2xl font-black italic tracking-tighter">${totalRevenue.toFixed(0)}</h4>
                     </div>
                 </div>
             </div>
 
-            {/* Control Bar */}
-            <div className="flex flex-col md:flex-row gap-6 justify-between items-center bg-[#0a0a0a] border border-white/5 p-6 rounded-sm">
-                <div className="flex items-center bg-white/5 px-6 py-3 border border-white/5 w-full md:max-w-md">
-                    <Search size={16} className="text-white/20" />
+            {/* ── WA Pending Alert ── */}
+            {pendingWaCount > 0 && (
+                <div className="bg-amber-400/5 border border-amber-400/20 p-6 flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
+                        <MessageCircle size={20} className="text-amber-400" />
+                        <div>
+                            <p className="text-amber-400 text-[11px] font-black uppercase tracking-widest">{pendingWaCount} pedido{pendingWaCount > 1 ? 's' : ''} pendiente{pendingWaCount > 1 ? 's' : ''} de confirmar por WhatsApp</p>
+                            <p className="text-white/30 text-[10px] mt-0.5">Revisa los detalles del cliente y confirma la venta para descontar del stock.</p>
+                        </div>
+                    </div>
+                    <button onClick={() => setStatusFilter('pending_whatsapp')} className="text-amber-400 border border-amber-400/30 px-4 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-amber-400/10 transition-all flex items-center space-x-2">
+                        <span>Ver</span><ChevronRight size={12} />
+                    </button>
+                </div>
+            )}
+
+            {/* ── Filters ── */}
+            <div className="flex flex-col md:flex-row gap-4 bg-[#0a0a0a] border border-white/5 p-5">
+                <div className="flex items-center bg-white/5 px-5 py-3 border border-white/5 flex-1">
+                    <Search size={14} className="text-white/20 shrink-0" />
                     <input
                         type="text"
-                        placeholder="Filtrar Pedidos (ID o Email)..."
+                        placeholder="Buscar por ID, nombre o email..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                         className="bg-transparent border-none focus:ring-0 text-[10px] font-black tracking-widest uppercase ml-4 w-full placeholder:text-white/10"
                     />
                 </div>
-                <div className="flex items-center space-x-4 w-full md:w-auto">
-                    <button className="flex-1 md:flex-none border border-white/5 px-8 py-3 text-[9px] font-black uppercase tracking-widest flex items-center justify-center space-x-2 hover:bg-white/5 transition-all">
-                        <Filter size={14} />
-                        <span>Estado: Todos</span>
-                    </button>
+                <div className="flex gap-2 flex-wrap">
+                    {['all', 'pending_whatsapp', 'confirmed', 'paid', 'shipped', 'cancelled'].map(status => (
+                        <button
+                            key={status}
+                            onClick={() => setStatusFilter(status)}
+                            className={`px-4 py-2 text-[9px] font-black uppercase tracking-widest transition-all border ${statusFilter === status
+                                    ? 'bg-white text-black border-white'
+                                    : 'border-white/10 text-white/30 hover:border-white/30 hover:text-white/60'
+                                }`}
+                        >
+                            {status === 'all' ? 'Todos' : STATUS_CONFIG[status]?.label || status}
+                        </button>
+                    ))}
                 </div>
             </div>
 
-            {/* Orders Table */}
-            <div className="bg-[#0a0a0a] border border-white/5 rounded-sm overflow-hidden">
-                <table className="w-full text-left">
-                    <thead>
-                        <tr className="bg-white/5 text-white/40 text-[10px] uppercase tracking-widest font-black">
-                            <th className="px-10 py-8 border-b border-white/5">Referencia ID</th>
-                            <th className="px-10 py-8 border-b border-white/5">Cliente & Contacto</th>
-                            <th className="px-10 py-8 border-b border-white/5">Estado Operativo</th>
-                            <th className="px-10 py-8 border-b border-white/5">Items</th>
-                            <th className="px-10 py-8 border-b border-white/5 text-right font-black">Monto Bruto</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
-                        {filteredOrders.map((order) => (
-                            <tr key={order.id} className="group hover:bg-white/[0.02] transition-colors relative">
-                                <td className="px-10 py-10">
-                                    <div className="flex items-center space-x-3">
-                                        <p className="font-display font-black text-[13px] tracking-tight text-white/60">#HQ-{order.id.slice(0, 8).toUpperCase()}</p>
-                                        <button className="text-white/10 hover:text-white transition-colors"><ExternalLink size={12} /></button>
-                                    </div>
-                                    <p className="text-[9px] text-white/20 font-black tracking-widest mt-2 uppercase italic">
-                                        {new Date(order.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                    </p>
-                                </td>
-                                <td className="px-10 py-10">
-                                    <div className="space-y-1">
-                                        <div className="flex items-center space-x-3">
-                                            <Mail size={12} className="text-white/30" />
-                                            <p className="text-[11px] font-black uppercase tracking-widest text-white/80">{order.customer_email}</p>
-                                        </div>
-                                        <p className="text-[9px] text-white/20 font-bold uppercase tracking-widest pl-6 italic">GUEST CUSTOMER</p>
-                                    </div>
-                                </td>
-                                <td className="px-10 py-10">
-                                    <div className="relative inline-block group/select">
-                                        <select
-                                            value={order.status}
-                                            disabled={updatingId === order.id}
-                                            onChange={(e) => handleStatusChange(order.status === 'paid' ? order.id : order.id, e.target.value)}
-                                            className={`appearance-none text-[10px] font-black px-6 py-2 pr-10 uppercase tracking-widest bg-white/5 border border-white/10 cursor-pointer focus:border-white transition-all ${order.status === 'paid' ? 'text-emerald-400' :
-                                                    order.status === 'shipped' ? 'text-blue-400' :
-                                                        order.status === 'cancelled' ? 'text-rose-500' : 'text-amber-400'
-                                                }`}
+            {/* ── Table + Detail Panel ── */}
+            <div className="flex gap-6">
+                {/* Table */}
+                <div className={`bg-[#0a0a0a] border border-white/5 overflow-hidden transition-all duration-500 ${selectedOrder ? 'flex-1' : 'w-full'}`}>
+                    {filteredOrders.length === 0 ? (
+                        <div className="py-40 text-center flex flex-col items-center">
+                            <ShoppingBag size={48} className="text-white/10 mb-6" />
+                            <h3 className="font-display text-3xl font-black italic text-white/40">Sin pedidos</h3>
+                        </div>
+                    ) : (
+                        <table className="w-full text-left">
+                            <thead>
+                                <tr className="bg-white/5 text-white/30 text-[9px] uppercase tracking-widest font-black">
+                                    <th className="px-6 py-5 border-b border-white/5">Pedido</th>
+                                    {!selectedOrder && <th className="px-6 py-5 border-b border-white/5">Cliente</th>}
+                                    <th className="px-6 py-5 border-b border-white/5">Estado</th>
+                                    <th className="px-6 py-5 border-b border-white/5 text-right">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {filteredOrders.map(order => {
+                                    const status = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending
+                                    const StatusIcon = status.icon
+                                    const MethodIcon = METHOD_ICON[order.checkout_method] || CreditCard
+                                    const isSelected = selectedOrder?.id === order.id
+                                    const isLoading = loadingId === order.id
+
+                                    return (
+                                        <tr
+                                            key={order.id}
+                                            onClick={() => setSelectedOrder(isSelected ? null : order)}
+                                            className={`cursor-pointer transition-colors ${isSelected ? 'bg-white/5' : 'hover:bg-white/[0.02]'}`}
                                         >
-                                            <option value="pending">Pendiente</option>
-                                            <option value="paid">Liquidado</option>
-                                            <option value="shipped">Enviado</option>
-                                            <option value="cancelled">Cancelado</option>
-                                        </select>
-                                        <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
-                                            {updatingId === order.id ? <Loader2 size={12} className="animate-spin" /> : <ChevronDown size={12} />}
+                                            <td className="px-6 py-5">
+                                                <div className="flex items-center space-x-2 mb-1">
+                                                    <MethodIcon size={12} className="text-white/30" />
+                                                    <p className="font-black text-[11px] text-white/60">#{order.id.slice(0, 6).toUpperCase()}</p>
+                                                </div>
+                                                <p className="text-[9px] text-white/20 uppercase tracking-wider">
+                                                    {new Date(order.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                                                </p>
+                                            </td>
+                                            {!selectedOrder && (
+                                                <td className="px-6 py-5">
+                                                    <p className="text-[11px] font-bold text-white/70">{order.customer_name || 'Guest'}</p>
+                                                    <p className="text-[9px] text-white/25">{order.customer_email}</p>
+                                                </td>
+                                            )}
+                                            <td className="px-6 py-5">
+                                                <div className={`inline-flex items-center space-x-1.5 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest ${status.bg}`}>
+                                                    {isLoading ? <Loader2 size={10} className="animate-spin" /> : <StatusIcon size={10} />}
+                                                    <span className={status.color}>{selectedOrder ? status.label.split(' ')[0] : status.label}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-5 text-right">
+                                                <p className="font-display font-black text-lg italic">${Number(order.total_amount).toFixed(2)}</p>
+                                            </td>
+                                        </tr>
+                                    )
+                                })}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+
+                {/* ── Detail Panel ── */}
+                {selectedOrder && (
+                    <div className="w-96 shrink-0 bg-[#0a0a0a] border border-white/5 flex flex-col animate-in slide-in-from-right-4 duration-300">
+                        {/* Panel header */}
+                        <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
+                            <div>
+                                <p className="text-white/20 text-[9px] font-black uppercase tracking-widest">Detalle del Pedido</p>
+                                <p className="font-black text-[11px] text-white/60 mt-0.5">#{selectedOrder.id.slice(0, 8).toUpperCase()}</p>
+                            </div>
+                            <button onClick={() => setSelectedOrder(null)} className="text-white/20 hover:text-white transition-colors">
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto">
+                            {/* Status badge */}
+                            <div className="px-6 py-4 border-b border-white/5">
+                                {(() => {
+                                    const s = STATUS_CONFIG[selectedOrder.status] || STATUS_CONFIG.pending
+                                    const SIcon = s.icon
+                                    return (
+                                        <div className={`inline-flex items-center space-x-2 px-3 py-2 text-[10px] font-black uppercase tracking-widest ${s.bg} ${s.color}`}>
+                                            <SIcon size={12} />
+                                            <span>{s.label}</span>
                                         </div>
+                                    )
+                                })()}
+                            </div>
+
+                            {/* Customer info */}
+                            <div className="px-6 py-5 border-b border-white/5 space-y-3">
+                                <p className="text-white/20 text-[9px] uppercase tracking-widest font-black">Datos del Cliente</p>
+                                <div className="flex items-center space-x-3">
+                                    <User size={14} className="text-white/20 shrink-0" />
+                                    <span className="text-[12px] font-bold text-white">{selectedOrder.customer_name || 'Guest'}</span>
+                                </div>
+                                <div className="flex items-center space-x-3">
+                                    <Mail size={14} className="text-white/20 shrink-0" />
+                                    <span className="text-[11px] text-white/50">{selectedOrder.customer_email}</span>
+                                </div>
+                                {selectedOrder.customer_phone && (
+                                    <div className="flex items-center space-x-3">
+                                        <Phone size={14} className="text-white/20 shrink-0" />
+                                        <span className="text-[11px] text-white/50">{selectedOrder.customer_phone}</span>
                                     </div>
-                                </td>
-                                <td className="px-10 py-10">
-                                    <div className="flex items-center space-x-6">
-                                        <div className="bg-white/5 w-10 h-10 flex items-center justify-center font-black text-[12px] border border-white/5">
-                                            {order.order_items?.length || 0}
+                                )}
+                                {selectedOrder.checkout_method === 'whatsapp' && selectedOrder.customer_phone && (
+                                    <a
+                                        href={`https://wa.me/${selectedOrder.customer_phone?.replace(/[^0-9]/g, '')}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="flex items-center space-x-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 px-3 py-2 text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500/20 transition-all mt-2"
+                                    >
+                                        <MessageCircle size={12} />
+                                        <span>Abrir WhatsApp</span>
+                                    </a>
+                                )}
+                            </div>
+
+                            {/* Order items */}
+                            <div className="px-6 py-5 border-b border-white/5 space-y-3">
+                                <p className="text-white/20 text-[9px] uppercase tracking-widest font-black">Artículos</p>
+                                {(selectedOrder.order_items || []).map((item: any, idx: number) => (
+                                    <div key={idx} className="flex justify-between items-start">
+                                        <div>
+                                            <p className="text-[11px] font-bold text-white/80">{item.products?.name || `Producto`}</p>
+                                            <p className="text-[9px] text-white/25 uppercase tracking-wider">
+                                                Talla: {item.size} · ×{item.quantity}
+                                            </p>
                                         </div>
-                                        <p className="text-[9px] font-black uppercase tracking-widest text-white/30">Artículos</p>
+                                        <p className="text-[12px] font-black">${(item.price_at_time * item.quantity).toFixed(2)}</p>
                                     </div>
-                                </td>
-                                <td className="px-10 py-10 text-right">
-                                    <div className="space-y-1">
-                                        <p className="font-display font-black text-2xl italic tracking-tighter text-white">${Number(order.total_amount).toFixed(2)}</p>
-                                        <div className="flex items-center justify-end text-emerald-400 text-[9px] font-black uppercase tracking-widest italic">
-                                            <TrendingUp size={10} className="mr-2" />
-                                            NET VALUE
-                                        </div>
+                                ))}
+                                {(selectedOrder.order_items || []).length === 0 && (
+                                    <p className="text-white/20 text-[10px]">Sin artículos registrados</p>
+                                )}
+                                <div className="border-t border-white/5 pt-3 flex justify-between">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-white/30">Total</span>
+                                    <span className="font-display font-black text-xl italic">${Number(selectedOrder.total_amount).toFixed(2)}</span>
+                                </div>
+                            </div>
+
+                            {/* Status selector */}
+                            <div className="px-6 py-5 border-b border-white/5">
+                                <p className="text-white/20 text-[9px] uppercase tracking-widest font-black mb-3">Cambiar Estado</p>
+                                <select
+                                    value={selectedOrder.status}
+                                    onChange={e => handleStatusChange(selectedOrder.id, e.target.value)}
+                                    disabled={loadingId === selectedOrder.id}
+                                    className="w-full bg-white/5 border border-white/10 p-3 text-white text-[11px] font-black uppercase tracking-widest focus:border-white outline-none cursor-pointer"
+                                >
+                                    <option value="pending_whatsapp">Esperando Confirmación WA</option>
+                                    <option value="pending">Pendiente</option>
+                                    <option value="confirmed">Confirmado</option>
+                                    <option value="paid">Pagado</option>
+                                    <option value="shipped">Enviado</option>
+                                    <option value="cancelled">Cancelado</option>
+                                    <option value="rejected">Rechazado</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* ── Action buttons ── */}
+                        <div className="px-6 py-5 border-t border-white/5 space-y-3">
+                            {/* Confirm WA order (main CTA) */}
+                            {(selectedOrder.status === 'pending_whatsapp' || selectedOrder.status === 'pending') && (
+                                <button
+                                    onClick={() => handleConfirm(selectedOrder.id)}
+                                    disabled={loadingId === selectedOrder.id}
+                                    className="w-full bg-emerald-500 text-white py-4 text-[10px] font-black uppercase tracking-widest flex items-center justify-center space-x-2 hover:bg-emerald-400 transition-all disabled:opacity-50"
+                                >
+                                    {loadingId === selectedOrder.id ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
+                                    <span>Confirmar Venta y Descontar Stock</span>
+                                </button>
+                            )}
+
+                            {/* Secondary actions */}
+                            <div className="grid grid-cols-2 gap-3">
+                                {selectedOrder.status !== 'rejected' && selectedOrder.status !== 'cancelled' && (
+                                    <button
+                                        onClick={() => handleReject(selectedOrder.id)}
+                                        disabled={loadingId === selectedOrder.id}
+                                        className="py-3 text-[9px] font-black uppercase tracking-widest border border-rose-500/30 text-rose-500 hover:bg-rose-500/10 transition-all flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                                    >
+                                        <XCircle size={12} />
+                                        <span>Rechazar</span>
+                                    </button>
+                                )}
+                                {selectedOrder.status !== 'shipped' && selectedOrder.status !== 'confirmed' && selectedOrder.status !== 'paid' && (
+                                    <button
+                                        onClick={() => handleStatusChange(selectedOrder.id, 'pending')}
+                                        disabled={loadingId === selectedOrder.id}
+                                        className="py-3 text-[9px] font-black uppercase tracking-widest border border-white/10 text-white/40 hover:bg-white/5 transition-all flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                                    >
+                                        <Clock size={12} />
+                                        <span>Pendiente</span>
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Delete */}
+                            {confirmingDelete === selectedOrder.id ? (
+                                <div className="bg-rose-500/10 border border-rose-500/20 p-4 space-y-3">
+                                    <p className="text-rose-400 text-[10px] font-black uppercase tracking-widest flex items-center space-x-2">
+                                        <AlertTriangle size={12} />
+                                        <span>¿Eliminar permanentemente?</span>
+                                    </p>
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => handleDelete(selectedOrder.id)}
+                                            disabled={loadingId === selectedOrder.id}
+                                            className="flex-1 bg-rose-500 text-white py-2.5 text-[9px] font-black uppercase tracking-widest hover:bg-rose-400 transition-all disabled:opacity-50"
+                                        >
+                                            {loadingId === selectedOrder.id ? <Loader2 size={12} className="animate-spin mx-auto" /> : 'Confirmar'}
+                                        </button>
+                                        <button onClick={() => setConfirmingDelete(null)} className="flex-1 border border-white/10 text-white/40 py-2.5 text-[9px] font-black uppercase tracking-widest hover:bg-white/5 transition-all">
+                                            Cancelar
+                                        </button>
                                     </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                {filteredOrders.length === 0 && (
-                    <div className="py-60 text-center flex flex-col items-center justify-center border-t border-white/5">
-                        <ShoppingBag size={64} className="mb-10 text-white/10" />
-                        <h3 className="font-display text-4xl font-black italic tracking-tightest uppercase mb-4 leading-none text-white/80">Silencio Operativo</h3>
-                        <p className="text-white/20 text-[11px] uppercase tracking-widest max-w-sm">No se han encontrado registros de transacciones bajo ese identificador.</p>
+                                </div>
+                            ) : (
+                                <button
+                                    onClick={() => setConfirmingDelete(selectedOrder.id)}
+                                    className="w-full py-3 text-[9px] font-black uppercase tracking-widest border border-white/5 text-white/20 hover:border-rose-500/30 hover:text-rose-400 transition-all flex items-center justify-center space-x-2"
+                                >
+                                    <Trash2 size={12} />
+                                    <span>Eliminar Pedido</span>
+                                </button>
+                            )}
+                        </div>
                     </div>
                 )}
             </div>

@@ -2,24 +2,41 @@
 
 import { useState } from 'react'
 import {
-    Save,
-    Loader2,
-    Globe,
-    MessageSquare,
-    Mail,
-    Phone,
-    MapPin,
-    AlertTriangle,
-    CheckCircle2,
-    Instagram,
-    ExternalLink,
-    Database
+    Save, Loader2, Globe, MessageSquare, Mail, Phone, MapPin,
+    CheckCircle2, Instagram, ExternalLink, Database,
+    CreditCard, MessageCircle, ShoppingBag, ChevronRight
 } from "lucide-react"
 import { upsertSettings } from '@/app/actions/admin-actions'
 
 interface SettingsClientProps {
     initialSettings: any
 }
+
+type CheckoutType = 'stripe' | 'whatsapp' | 'email'
+
+const CHECKOUT_OPTIONS: { value: CheckoutType; label: string; icon: any; description: string; color: string }[] = [
+    {
+        value: 'stripe',
+        label: 'Stripe / Tarjeta',
+        icon: CreditCard,
+        description: 'Checkout con pago online seguro. Compatible con Klarna, tarjeta de crédito y débito.',
+        color: 'blue'
+    },
+    {
+        value: 'whatsapp',
+        label: 'WhatsApp Manual',
+        icon: MessageCircle,
+        description: 'El cliente envía su pedido por WhatsApp. Tú confirmas la venta y acuerdas el pago.',
+        color: 'emerald'
+    },
+    {
+        value: 'email',
+        label: 'Email / Contacto',
+        icon: Mail,
+        description: 'El cliente envía su pedido por correo electrónico. Ideal para mercados sin Stripe.',
+        color: 'violet'
+    }
+]
 
 export default function SettingsClient({ initialSettings }: SettingsClientProps) {
     const [loading, setLoading] = useState(false)
@@ -33,7 +50,8 @@ export default function SettingsClient({ initialSettings }: SettingsClientProps)
         instagram_url: '',
         whatsapp_number: '',
         currency: 'USD',
-        shipping_fee: 0
+        shipping_fee: 0,
+        checkout_type: 'stripe'
     })
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -46,8 +64,7 @@ export default function SettingsClient({ initialSettings }: SettingsClientProps)
             setSaved(true)
             setTimeout(() => setSaved(false), 3000)
         } catch (error: any) {
-            console.error(error)
-            if (error?.message?.includes('schema cache') || error?.message?.includes('relation') || error?.message?.includes('does not exist')) {
+            if (error?.message?.includes('schema cache') || error?.message?.includes('relation') || error?.message?.includes('does not exist') || error?.message?.includes('column')) {
                 setDbError(true)
             } else {
                 alert('Error al guardar: ' + error?.message)
@@ -55,6 +72,12 @@ export default function SettingsClient({ initialSettings }: SettingsClientProps)
         } finally {
             setLoading(false)
         }
+    }
+
+    const checkoutColor: Record<CheckoutType, string> = {
+        stripe: 'blue',
+        whatsapp: 'emerald',
+        email: 'violet'
     }
 
     return (
@@ -73,10 +96,10 @@ export default function SettingsClient({ initialSettings }: SettingsClientProps)
                     <div className="flex items-start space-x-4">
                         <Database size={24} className="text-amber-400 shrink-0 mt-0.5" />
                         <div>
-                            <p className="text-[11px] font-black uppercase tracking-widest text-amber-400 mb-2">Tabla Faltante en Base de Datos</p>
+                            <p className="text-[11px] font-black uppercase tracking-widest text-amber-400 mb-2">Tabla Faltante — Acción Requerida</p>
                             <p className="text-[11px] text-white/40 leading-relaxed mb-4">
-                                La tabla <code className="text-amber-300 bg-amber-400/10 px-1">store_settings</code> no existe en tu proyecto Supabase.
-                                Ejecuta el siguiente SQL en el editor de Supabase:
+                                La tabla <code className="text-amber-300 bg-amber-400/10 px-1">store_settings</code> no existe o le faltan columnas.
+                                Ejecuta el SQL en el editor de Supabase:
                             </p>
                             <a
                                 href="https://supabase.com/dashboard/project/nflojloxwutopunsqerg/sql/new"
@@ -89,7 +112,6 @@ export default function SettingsClient({ initialSettings }: SettingsClientProps)
                             </a>
                         </div>
                     </div>
-
                     <pre className="bg-black/40 border border-white/5 p-6 text-[10px] text-emerald-400 overflow-x-auto leading-relaxed font-mono">
                         {`create table if not exists public.store_settings (
   id uuid primary key default gen_random_uuid(),
@@ -101,41 +123,120 @@ export default function SettingsClient({ initialSettings }: SettingsClientProps)
   whatsapp_number text,
   currency text default 'USD',
   shipping_fee numeric(10,2) default 0.00,
+  checkout_type text default 'stripe',
   updated_at timestamptz default now()
 );
 
 alter table public.store_settings enable row level security;
 
-create policy "store_settings_public_read"
+create policy if not exists "store_settings_public_read"
   on public.store_settings for select using (true);
 
-create policy "store_settings_auth_all"
+create policy if not exists "store_settings_auth_all"
   on public.store_settings for all
   using (auth.role() = 'authenticated')
   with check (auth.role() = 'authenticated');
 
 insert into public.store_settings
-  (id, store_name, contact_email, currency, shipping_fee)
+  (id, store_name, contact_email, currency, checkout_type)
 values
-  ('00000000-0000-0000-0000-000000000001',
-   'Fenix Fit', 'cbs@bcnnorth.com', 'USD', 0.00)
-on conflict (id) do nothing;`}
+  ('00000000-0000-0000-0000-000000000001', 'Fenix Fit', 'cbs@bcnnorth.com', 'USD', 'stripe')
+on conflict (id) do nothing;
+
+-- Add checkout_type if the table exists but column is missing:
+alter table public.store_settings add column if not exists checkout_type text default 'stripe';`}
                     </pre>
                 </div>
             )}
 
             {/* Success Banner */}
             {saved && (
-                <div className="bg-emerald-400/5 border border-emerald-400/20 p-5 flex items-center space-x-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="bg-emerald-400/5 border border-emerald-400/20 p-5 flex items-center space-x-4 animate-in fade-in duration-300">
                     <CheckCircle2 size={20} className="text-emerald-400 shrink-0" />
                     <p className="text-[11px] font-black uppercase tracking-widest text-emerald-400">
-                        Configuración sincronizada con el servidor central
+                        Configuración sincronizada correctamente
                     </p>
                 </div>
             )}
 
             <form onSubmit={handleSubmit} className="space-y-8">
-                {/* Brand Identity */}
+
+                {/* ── Checkout Type ── */}
+                <div className="bg-[#0a0a0a] border border-white/5 p-10">
+                    <h3 className="text-white/40 text-[10px] uppercase tracking-widest font-black mb-2 flex items-center">
+                        <ShoppingBag size={14} className="mr-3" /> Método de Checkout
+                    </h3>
+                    <p className="text-white/20 text-[10px] mb-8">Elige cómo recibirás los pedidos de tus clientes.</p>
+
+                    <div className="grid grid-cols-1 gap-4">
+                        {CHECKOUT_OPTIONS.map(opt => {
+                            const isActive = formData.checkout_type === opt.value
+                            const Icon = opt.icon
+                            return (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => setFormData({ ...formData, checkout_type: opt.value })}
+                                    className={`flex items-center space-x-5 p-6 text-left border transition-all duration-200 ${isActive
+                                            ? opt.value === 'stripe' ? 'border-blue-500/50 bg-blue-500/5'
+                                                : opt.value === 'whatsapp' ? 'border-emerald-500/50 bg-emerald-500/5'
+                                                    : 'border-violet-500/50 bg-violet-500/5'
+                                            : 'border-white/5 hover:border-white/20 bg-transparent'
+                                        }`}
+                                >
+                                    <div className={`w-12 h-12 flex items-center justify-center shrink-0 ${isActive
+                                            ? opt.value === 'stripe' ? 'bg-blue-500/10'
+                                                : opt.value === 'whatsapp' ? 'bg-emerald-500/10'
+                                                    : 'bg-violet-500/10'
+                                            : 'bg-white/5'
+                                        }`}>
+                                        <Icon size={20} className={
+                                            isActive
+                                                ? opt.value === 'stripe' ? 'text-blue-400'
+                                                    : opt.value === 'whatsapp' ? 'text-emerald-400'
+                                                        : 'text-violet-400'
+                                                : 'text-white/30'
+                                        } />
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className={`font-black text-[12px] uppercase tracking-widest mb-1 ${isActive ? 'text-white' : 'text-white/50'}`}>
+                                            {opt.label}
+                                        </p>
+                                        <p className="text-[10px] text-white/25 leading-relaxed">{opt.description}</p>
+                                    </div>
+                                    <div className={`w-5 h-5 rounded-full border-2 shrink-0 flex items-center justify-center transition-all ${isActive
+                                            ? opt.value === 'stripe' ? 'border-blue-400 bg-blue-400'
+                                                : opt.value === 'whatsapp' ? 'border-emerald-400 bg-emerald-400'
+                                                    : 'border-violet-400 bg-violet-400'
+                                            : 'border-white/20 bg-transparent'
+                                        }`}>
+                                        {isActive && <CheckCircle2 size={10} className="text-black" />}
+                                    </div>
+                                </button>
+                            )
+                        })}
+                    </div>
+
+                    {/* WhatsApp number helper (only when WA checkout selected) */}
+                    {formData.checkout_type === 'whatsapp' && (
+                        <div className="mt-6 pt-6 border-t border-white/5">
+                            <label className="text-white/20 text-[9px] uppercase tracking-widest font-black mb-2 flex items-center">
+                                <MessageCircle size={10} className="mr-2 text-emerald-400" />
+                                Número de WhatsApp (con prefijo de país)
+                            </label>
+                            <input
+                                type="text"
+                                value={formData.whatsapp_number}
+                                onChange={e => setFormData({ ...formData, whatsapp_number: e.target.value })}
+                                className="w-full bg-white/5 border border-emerald-500/30 p-4 text-white text-sm focus:border-emerald-400 outline-none transition-all"
+                                placeholder="+34 612 345 678"
+                            />
+                            <p className="text-white/20 text-[9px] mt-2">Ejemplo: +34612345678 · Los clientes abrirán WhatsApp con su pedido ya redactado.</p>
+                        </div>
+                    )}
+                </div>
+
+                {/* ── Brand Identity ── */}
                 <div className="bg-[#0a0a0a] border border-white/5 p-10">
                     <h3 className="text-white/40 text-[10px] uppercase tracking-widest font-black mb-8 flex items-center">
                         <Globe size={14} className="mr-3" /> Identidad de la Marca
@@ -181,7 +282,7 @@ on conflict (id) do nothing;`}
                     </div>
                 </div>
 
-                {/* Contact & Social */}
+                {/* ── Contact & Social ── */}
                 <div className="bg-[#0a0a0a] border border-white/5 p-10">
                     <h3 className="text-white/40 text-[10px] uppercase tracking-widest font-black mb-8 flex items-center">
                         <MessageSquare size={14} className="mr-3" /> Contacto y Redes
@@ -189,7 +290,7 @@ on conflict (id) do nothing;`}
                     <div className="grid grid-cols-2 gap-6">
                         <div>
                             <label className="text-white/20 text-[9px] uppercase tracking-widest font-black mb-2 flex items-center">
-                                <Mail size={10} className="mr-2" /> Email
+                                <Mail size={10} className="mr-2" /> Email de Contacto
                             </label>
                             <input
                                 type="email"
@@ -219,7 +320,7 @@ on conflict (id) do nothing;`}
                                 value={formData.instagram_url}
                                 onChange={e => setFormData({ ...formData, instagram_url: e.target.value })}
                                 className="w-full bg-white/5 border border-white/10 p-4 text-white text-sm focus:border-white outline-none"
-                                placeholder="https://instagram.com/fenixfit"
+                                placeholder="https://instagram.com/..."
                             />
                         </div>
                         <div>
@@ -237,21 +338,19 @@ on conflict (id) do nothing;`}
                     </div>
                 </div>
 
-                {/* Actions */}
+                {/* ── Actions ── */}
                 <div className="flex justify-between items-center pt-4">
                     <p className="text-[9px] font-black uppercase tracking-widest text-white/20">
-                        Los cambios se sincronizan con el servidor central
+                        Los cambios se aplican en tiempo real a la tienda
                     </p>
                     <button
                         type="submit"
                         disabled={loading}
-                        className={`px-12 py-5 text-[11px] font-black uppercase tracking-[0.2em] flex items-center space-x-3 transition-all ${saved
-                                ? 'bg-emerald-400 text-black'
-                                : 'bg-white text-black hover:bg-white/90'
+                        className={`px-12 py-5 text-[11px] font-black uppercase tracking-[0.2em] flex items-center space-x-3 transition-all ${saved ? 'bg-emerald-400 text-black' : 'bg-white text-black hover:bg-white/90'
                             } disabled:opacity-50`}
                     >
                         {loading ? <Loader2 size={18} className="animate-spin" /> : saved ? <CheckCircle2 size={18} /> : <Save size={18} />}
-                        <span>{saved ? 'Guardado ✓' : 'Sincronizar HQ'}</span>
+                        <span>{saved ? 'Guardado ✓' : 'Guardar Cambios'}</span>
                     </button>
                 </div>
             </form>
