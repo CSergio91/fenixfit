@@ -172,7 +172,7 @@ export default function AdminLayout({
                         <div className={`flex items-center min-w-0 ${isSidebarOpen ? 'flex-1 mr-2' : ''}`}>
                             <div className="shrink-0 w-9 h-9 flex items-center justify-center overflow-hidden">
                                 <Image
-                                    src="/logo.jpg"
+                                    src="/fenix-logo-white.png"
                                     alt="Fenix Fit"
                                     width={36}
                                     height={36}

@@ -50,7 +50,7 @@ export function Header() {
                         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center w-full max-w-[120px] md:max-w-[160px] h-full py-2">
                             <Link href="/" className="relative w-full h-full flex items-center justify-center transition-opacity hover:opacity-80">
                                 <Image
-                                    src="/logo.jpg"
+                                    src="/fenix-logo-black.png"
                                     alt="Fenix Fit Logo"
                                     fill
                                     className="object-contain"

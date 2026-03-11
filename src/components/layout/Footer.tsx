@@ -10,7 +10,7 @@ export function Footer() {
                         <Link href="/" className="block mb-8 transition-opacity hover:opacity-80">
                             <div className="relative w-32 h-12 md:w-40 md:h-14">
                                 <Image
-                                    src="/logo.jpg"
+                                    src="/fenix-logo-black.png"
                                     alt="Fenix Fit Logo"
                                     fill
                                     className="object-contain object-left"
