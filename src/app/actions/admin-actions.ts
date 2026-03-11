@@ -123,6 +123,12 @@ export async function createWhatsappOrder(orderData: {
     customer_name: string
     customer_email: string
     customer_phone?: string
+    shipping_address?: {
+        street?: string
+        city?: string
+        postal_code?: string
+        country?: string
+    }
     items: Array<{ product_id: string; variant_id?: string; size: string; quantity: number; price: number; product_name?: string }>
     total_amount: number
 }) {
@@ -136,7 +142,7 @@ export async function createWhatsappOrder(orderData: {
             total_amount: orderData.total_amount,
             status: 'pending_whatsapp',
             checkout_method: 'whatsapp',
-            shipping_address: {}
+            shipping_address: orderData.shipping_address || {}
         })
         .select()
         .single()

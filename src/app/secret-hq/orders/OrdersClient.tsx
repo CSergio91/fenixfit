@@ -153,8 +153,8 @@ export default function OrdersClient({ initialOrders }: { initialOrders: any[] }
                             key={status}
                             onClick={() => setStatusFilter(status)}
                             className={`px-4 py-2 text-[9px] font-black uppercase tracking-widest transition-all border ${statusFilter === status
-                                    ? 'bg-white text-black border-white'
-                                    : 'border-white/10 text-white/30 hover:border-white/30 hover:text-white/60'
+                                ? 'bg-white text-black border-white'
+                                : 'border-white/10 text-white/30 hover:border-white/30 hover:text-white/60'
                                 }`}
                         >
                             {status === 'all' ? 'Todos' : STATUS_CONFIG[status]?.label || status}
@@ -286,6 +286,28 @@ export default function OrdersClient({ initialOrders }: { initialOrders: any[] }
                                     </a>
                                 )}
                             </div>
+
+                            {/* Shipping address */}
+                            {selectedOrder.shipping_address && Object.values(selectedOrder.shipping_address).some(Boolean) && (
+                                <div className="px-6 py-5 border-b border-white/5 space-y-2">
+                                    <p className="text-white/20 text-[9px] uppercase tracking-widest font-black flex items-center space-x-2">
+                                        <Package size={10} />
+                                        <span>Dirección de Envío</span>
+                                    </p>
+                                    {selectedOrder.shipping_address.street && (
+                                        <p className="text-[11px] text-white/60">{selectedOrder.shipping_address.street}</p>
+                                    )}
+                                    <p className="text-[11px] text-white/60">
+                                        {[
+                                            selectedOrder.shipping_address.city,
+                                            selectedOrder.shipping_address.postal_code
+                                        ].filter(Boolean).join(' ')}
+                                        {selectedOrder.shipping_address.country && (
+                                            <span className="text-white/30"> — {selectedOrder.shipping_address.country}</span>
+                                        )}
+                                    </p>
+                                </div>
+                            )}
 
                             {/* Order items */}
                             <div className="px-6 py-5 border-b border-white/5 space-y-3">

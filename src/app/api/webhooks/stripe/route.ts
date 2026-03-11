@@ -3,11 +3,15 @@ import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createAdminClient } from '@/lib/supabase/server';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-    apiVersion: '2025-02-11' as any,
-});
+// Force dynamic so Vercel doesn't try to pre-render this route at build time
+export const dynamic = 'force-dynamic';
 
 export async function POST(req: Request) {
+    // Instantiate Stripe INSIDE the handler so the env var is read at runtime, not build time
+    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
+        apiVersion: '2025-02-11' as any,
+    });
+
     const body = await req.text();
     const signature = (await headers()).get('Stripe-Signature') as string;
 
@@ -41,6 +45,7 @@ export async function POST(req: Request) {
                 customer_name: session.customer_details?.name || 'Guest',
                 total_amount: (session.amount_total || 0) / 100,
                 status: 'paid',
+                checkout_method: 'stripe',
                 shipping_address: sessionAny.shipping_details?.address || {},
                 utm_source: session.metadata?.utm_source || null,
                 utm_medium: session.metadata?.utm_medium || null,
@@ -65,13 +70,20 @@ export async function POST(req: Request) {
         }));
 
         const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
-
-        // 3. Update Stock (Simple version)
-        for (const item of items) {
-            await supabase.rpc('decrement_stock', { p_id: item.p_id, qty: item.qty });
-        }
-
         if (itemsError) console.error('Items Insert Error:', itemsError);
+
+        // 3. Update Stock for each item
+        for (const item of items) {
+            const { data: product } = await supabase
+                .from('products')
+                .select('stock')
+                .eq('id', item.p_id)
+                .single();
+            if (product) {
+                const newStock = Math.max(0, (product.stock || 0) - item.qty);
+                await supabase.from('products').update({ stock: newStock }).eq('id', item.p_id);
+            }
+        }
     }
 
     return NextResponse.json({ received: true });

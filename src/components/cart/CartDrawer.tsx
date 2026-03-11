@@ -28,6 +28,11 @@ export function CartDrawer() {
     const [customerName, setCustomerName] = useState('');
     const [customerEmail, setCustomerEmail] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
+    // Shipping address
+    const [addressStreet, setAddressStreet] = useState('');
+    const [addressCity, setAddressCity] = useState('');
+    const [addressPostal, setAddressPostal] = useState('');
+    const [addressCountry, setAddressCountry] = useState('');
 
     const router = useRouter();
 
@@ -49,6 +54,7 @@ export function CartDrawer() {
         const lines = items.map(item =>
             `• ${item.quantity}x ${item.product.name} (${item.variant.colorName ?? item.variant.colorName}, Talla: ${item.size}) — $${(item.product.price * item.quantity).toFixed(2)}`
         );
+        const addressLine = [addressStreet, addressCity, addressPostal, addressCountry].filter(Boolean).join(', ');
         const msg = [
             `🛍️ *Nuevo Pedido — ${storeName}*`,
             ``,
@@ -59,10 +65,16 @@ export function CartDrawer() {
             `👤 *Datos del cliente:*`,
             `• Nombre: ${customerName}`,
             `• Email: ${customerEmail}`,
-            customerPhone ? `• Teléfono: ${customerPhone}` : '',
+            customerPhone ? `• Teléfono: ${customerPhone}` : null,
+            ``,
+            `📦 *Dirección de envío:*`,
+            addressStreet ? `• Calle: ${addressStreet}` : null,
+            addressCity ? `• Ciudad: ${addressCity}` : null,
+            addressPostal ? `• Código Postal: ${addressPostal}` : null,
+            addressCountry ? `• País: ${addressCountry}` : null,
             ``,
             `_Por favor confirma disponibilidad y método de pago._`
-        ].filter(l => l !== undefined).join('\n');
+        ].filter(l => l !== null).join('\n');
         return msg;
     };
 
@@ -110,6 +122,12 @@ export function CartDrawer() {
                 customer_email: customerEmail,
                 customer_phone: customerPhone,
                 total_amount: total,
+                shipping_address: {
+                    street: addressStreet,
+                    city: addressCity,
+                    postal_code: addressPostal,
+                    country: addressCountry,
+                },
                 items: items.map(item => ({
                     product_id: item.product.id,
                     variant_id: item.variant.id,
@@ -368,6 +386,63 @@ export function CartDrawer() {
                                     </div>
                                 )}
 
+                                {/* Shipping Address */}
+                                <div className="pt-2">
+                                    <div className="flex items-center space-x-2 mb-4">
+                                        <div className="flex-1 h-px bg-gray-100" />
+                                        <p className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-300 shrink-0">📦 Dirección de Envío</p>
+                                        <div className="flex-1 h-px bg-gray-100" />
+                                    </div>
+                                    <div className="space-y-3">
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 block">Calle y número *</label>
+                                            <input
+                                                type="text"
+                                                value={addressStreet}
+                                                onChange={e => setAddressStreet(e.target.value)}
+                                                className="w-full border border-gray-200 px-4 py-3 text-sm focus:border-black outline-none transition-all"
+                                                placeholder="Calle Mayor 42, 3ºB"
+                                                required
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 block">Ciudad *</label>
+                                                <input
+                                                    type="text"
+                                                    value={addressCity}
+                                                    onChange={e => setAddressCity(e.target.value)}
+                                                    className="w-full border border-gray-200 px-4 py-3 text-sm focus:border-black outline-none transition-all"
+                                                    placeholder="Madrid"
+                                                    required
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 block">C.P. *</label>
+                                                <input
+                                                    type="text"
+                                                    value={addressPostal}
+                                                    onChange={e => setAddressPostal(e.target.value)}
+                                                    className="w-full border border-gray-200 px-4 py-3 text-sm focus:border-black outline-none transition-all"
+                                                    placeholder="28001"
+                                                    required
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-1.5 block">País *</label>
+                                            <input
+                                                type="text"
+                                                value={addressCountry}
+                                                onChange={e => setAddressCountry(e.target.value)}
+                                                className="w-full border border-gray-200 px-4 py-3 text-sm focus:border-black outline-none transition-all"
+                                                placeholder="España"
+                                                required
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {checkoutType === 'whatsapp' && (
                                     <div className="bg-emerald-50 border border-emerald-200 p-4 rounded-sm">
                                         <div className="flex items-start space-x-3">
@@ -375,7 +450,7 @@ export function CartDrawer() {
                                             <div>
                                                 <p className="text-[11px] font-black text-emerald-800 uppercase tracking-wider mb-1">Pedido por WhatsApp</p>
                                                 <p className="text-[10px] text-emerald-700 leading-relaxed">
-                                                    Al confirmar, se abrirá WhatsApp con un mensaje que incluye todos los detalles de tu pedido. El dueño confirmará la disponibilidad y el método de pago.
+                                                    Al confirmar, se abrirá WhatsApp con un mensaje con tu pedido completo y dirección de envío. El vendedor coordinará el pago.
                                                 </p>
                                             </div>
                                         </div>
