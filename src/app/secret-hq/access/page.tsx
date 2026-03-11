@@ -103,7 +103,7 @@ export default function AdminLoginPage() {
                                     button_label: 'REGISTRAR NUEVO ACCESO',
                                     link_text: '¿No tienes cuenta? Registrarse',
                                 },
-                                forgot_password: {
+                                forgotten_password: {
                                     link_text: '¿Olvidaste tu contraseña?',
                                     button_label: 'RECUPERAR ACCESO',
                                     email_label: 'CORREO ELECTRÓNICO',

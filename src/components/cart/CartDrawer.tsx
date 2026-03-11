@@ -103,7 +103,7 @@ export function CartDrawer() {
                                 <li key={item.id} className="flex space-x-6">
                                     <div className="relative w-24 h-32 flex-shrink-0 bg-gray-50 overflow-hidden">
                                         <Image
-                                            src={item.variant.main_image || item.variant.mainImage}
+                                            src={item.variant.mainImage}
                                             alt={item.product.name}
                                             fill
                                             className="object-cover"
@@ -120,7 +120,7 @@ export function CartDrawer() {
                                                 <p className="text-[13px] font-bold font-display">${item.product.price}</p>
                                             </div>
                                             <div className="flex items-center space-x-3 text-[11px] text-muted-light uppercase tracking-wider font-semibold">
-                                                <span>{item.variant.color_name || item.variant.colorName}</span>
+                                                <span>{item.variant.colorName}</span>
                                                 <span className="w-1 h-1 bg-gray-300 rounded-full"></span>
                                                 <span>Size {item.size}</span>
                                             </div>
