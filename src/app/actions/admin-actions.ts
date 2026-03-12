@@ -12,7 +12,7 @@ import {
 
 // ─── PRODUCTS ─────────────────────────────────────────────────────────────────
 export async function upsertProduct(productData: any, variantsData: any[]) {
-    const supabase = await createClient()
+    const supabase = await createAdminClient()
     const { data: product, error } = await supabase
         .from('products')
         .upsert({

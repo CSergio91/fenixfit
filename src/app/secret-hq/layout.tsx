@@ -314,6 +314,9 @@ export default function AdminLayout({
                         {navItems.map((item) => {
                             const isActive = pathname === item.href || pathname?.startsWith(item.href);
                             const Icon = item.icon;
+                            const hasNewOrders = item.name === 'Pedidos' && notifications.some(n => n.type === 'new_order' || n.title.toLowerCase().includes('pedido'));
+                            const orderNotifCount = item.name === 'Pedidos' ? notifications.filter(n => n.type === 'new_order' || n.title.toLowerCase().includes('pedido')).length : 0;
+
                             return (
                                 <Link
                                     key={item.name}
@@ -323,11 +326,18 @@ export default function AdminLayout({
                                         : "text-white/40 hover:text-white hover:bg-white/[0.03]"
                                         }`}
                                 >
-                                    <Icon
-                                        size={22}
-                                        className={`mr-4 transition-transform duration-300 ${isActive ? "scale-110" : "group-hover:scale-110"
-                                            }`}
-                                    />
+                                    <div className="relative">
+                                        <Icon
+                                            size={22}
+                                            className={`mr-4 transition-transform duration-300 ${isActive ? "scale-110" : "group-hover:scale-110"
+                                                }`}
+                                        />
+                                        {orderNotifCount > 0 && (
+                                            <span className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 text-black text-[9px] font-black flex items-center justify-center rounded-sm animate-pulse">
+                                                {orderNotifCount}
+                                            </span>
+                                        )}
+                                    </div>
                                     <span className={isSidebarOpen ? "opacity-100" : "opacity-0 invisible"}>{item.name}</span>
                                     {isActive && (
                                         <div className="absolute left-0 top-0 bottom-0 w-1 bg-white" />
@@ -432,7 +442,9 @@ export default function AdminLayout({
                             >
                                 <Bell size={18} className={notifications.length > 0 ? 'animate-bounce' : ''} />
                                 {notifications.length > 0 && (
-                                    <span className="absolute top-1.5 right-1.5 w-1.5 h-1.5 bg-emerald-400 rounded-full" />
+                                    <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] px-1 bg-emerald-400 text-black text-[8px] font-black flex items-center justify-center rounded-full">
+                                        {notifications.length}
+                                    </span>
                                 )}
                             </button>
 

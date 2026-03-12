@@ -1,32 +1,43 @@
 'use server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 
-import { createClient } from '@/lib/supabase/server'
+const BUCKET_NAME = 'prendas'
 
-const BUCKET_NAME = 'product-images'
+// Ensure bucket exists - Use Admin Client for DDL operations
+async function ensureBucket() {
+    const admin = await createAdminClient()
+    const { data: buckets, error: listError } = await admin.storage.listBuckets()
 
-// Ensure bucket exists
-async function ensureBucket(supabase: any) {
-    const { data: buckets } = await supabase.storage.listBuckets()
+    if (listError) {
+        console.error('Error listing buckets:', listError)
+        return
+    }
+
     const exists = buckets?.some((b: any) => b.name === BUCKET_NAME)
     if (!exists) {
-        await supabase.storage.createBucket(BUCKET_NAME, {
+        console.log(`Creating bucket: ${BUCKET_NAME}`)
+        const { error: createError } = await admin.storage.createBucket(BUCKET_NAME, {
             public: true,
             allowedMimeTypes: ['image/png', 'image/jpg', 'image/jpeg', 'image/webp', 'image/gif'],
             fileSizeLimit: 10485760 // 10MB
         })
+        if (createError) console.error('Error creating bucket:', createError)
     }
 }
 
 // List all images in bucket (optionally by folder/color)
 export async function listBucketImages(folder?: string): Promise<{ name: string; url: string; path: string }[]> {
     const supabase = await createClient()
-    await ensureBucket(supabase)
+    await ensureBucket()
 
     const { data, error } = await supabase.storage
         .from(BUCKET_NAME)
         .list(folder || '', { sortBy: { column: 'created_at', order: 'desc' } })
 
-    if (error || !data) return []
+    if (error || !data) {
+        console.error('Storage list error:', error)
+        return []
+    }
 
     return data
         .filter((f: any) => f.metadata) // exclude folders
@@ -48,8 +59,8 @@ export async function uploadProductImage(
     mimeType: string,
     folder?: string
 ): Promise<string> {
-    const supabase = await createClient()
-    await ensureBucket(supabase)
+    const admin = await createAdminClient()
+    await ensureBucket()
 
     // Convert base64 to buffer
     const base64Data = fileBase64.replace(/^data:[^;]+;base64,/, '')
@@ -58,7 +69,9 @@ export async function uploadProductImage(
     const sanitizedName = fileName.replace(/[^a-zA-Z0-9._-]/g, '_')
     const filePath = folder ? `${folder}/${sanitizedName}` : sanitizedName
 
-    const { error } = await supabase.storage
+    console.log(`Uploading to ${BUCKET_NAME}/${filePath}...`)
+
+    const { error } = await admin.storage
         .from(BUCKET_NAME)
         .upload(filePath, buffer, {
             contentType: mimeType,
@@ -66,9 +79,10 @@ export async function uploadProductImage(
         })
 
     if (error) {
-        throw new Error(error.message)
+        console.error('Upload Error Details:', error)
+        throw new Error(`Error de Supabase: ${error.message} (Bucket: ${BUCKET_NAME})`)
     }
 
-    const { data: urlData } = supabase.storage.from(BUCKET_NAME).getPublicUrl(filePath)
+    const { data: urlData } = admin.storage.from(BUCKET_NAME).getPublicUrl(filePath)
     return urlData.publicUrl
 }

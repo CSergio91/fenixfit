@@ -92,7 +92,7 @@ export default function ImagePickerModal({ folder, onSelect, onClose }: ImagePic
                         <div>
                             <span className="text-white/20 text-[9px] uppercase tracking-[0.4em] font-black block">Supabase Storage</span>
                             <h3 className="text-sm font-black uppercase tracking-widest">
-                                {folder ? `Bucket / ${folder}` : 'Bucket / product-images'}
+                                {folder ? `Bucket / ${folder}` : 'Bucket / prendas'}
                             </h3>
                         </div>
                     </div>
@@ -160,8 +160,8 @@ export default function ImagePickerModal({ folder, onSelect, onClose }: ImagePic
                                     type="button"
                                     onClick={() => setSelectedUrl(img.url)}
                                     className={`relative aspect-square overflow-hidden border-2 transition-all duration-200 group ${selectedUrl === img.url
-                                            ? 'border-white shadow-[0_0_20px_rgba(255,255,255,0.3)]'
-                                            : 'border-transparent hover:border-white/30'
+                                        ? 'border-white shadow-[0_0_20px_rgba(255,255,255,0.3)]'
+                                        : 'border-transparent hover:border-white/30'
                                         }`}
                                 >
                                     <img
