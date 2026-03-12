@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { productService } from "@/services/productService";
+import { ArrowRight, Heart, Share2 } from "lucide-react";
 
 export default async function Home() {
   const products = await productService.getAllProducts();
@@ -50,14 +51,14 @@ export default async function Home() {
             <p className="text-muted-light text-lg font-light italic">The latest innovations in performance wear.</p>
           </div>
           <Link href="/collections" className="hidden md:inline-flex items-center text-[11px] font-bold uppercase tracking-[0.2em] hover:text-primary/60 transition-colors border-b-2 border-primary pb-2">
-            View All <span className="material-icons text-sm ml-2">arrow_forward</span>
+            View All <ArrowRight size={14} className="ml-2" />
           </Link>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-16">
           {justDroppedProducts.map((product) => {
             const variant = product.variants[0];
-            const isHotSale = product.original_price && product.original_price > product.price;
+            const isHotSale = Boolean(product.original_price && product.original_price > product.price);
             const isLastUnits = product.stock < 10;
 
             return (
@@ -79,9 +80,12 @@ export default async function Home() {
 
                   {/* DYNAMIC BADGES */}
                   <div className="absolute top-6 left-6 flex flex-col space-y-2">
-                    {product.badges && product.badges.map((badge, idx) => (
-                      <span key={idx} className="bg-primary text-white text-[9px] font-black px-2.5 py-1.5 uppercase tracking-widest self-start">{badge}</span>
-                    ))}
+                    {product.badges && Array.isArray(product.badges) && product.badges.map((badge, idx) => {
+                      if (badge === '0' || badge === '' || badge === null) return null;
+                      return (
+                        <span key={idx} className="bg-primary text-white text-[9px] font-black px-2.5 py-1.5 uppercase tracking-widest self-start">{badge}</span>
+                      )
+                    })}
                     {isHotSale && (
                       <span className="bg-red-600 text-white text-[9px] font-black px-2.5 py-1.5 uppercase tracking-widest self-start">Hot Sale</span>
                     )}
@@ -160,7 +164,9 @@ export default async function Home() {
               <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent"></div>
               <div className="absolute inset-x-0 bottom-0 p-10 flex justify-between items-end">
                 <h3 className="font-display text-4xl text-white font-black tracking-tight uppercase italic">{activity.tag}</h3>
-                <span className="material-icons text-white bg-white/20 backdrop-blur-md rounded-full w-12 h-12 flex items-center justify-center group-hover:bg-white group-hover:text-primary transition-all shadow-xl">arrow_forward</span>
+                <span className="text-white bg-white/20 backdrop-blur-md rounded-full w-12 h-12 flex items-center justify-center group-hover:bg-white group-hover:text-primary transition-all shadow-xl">
+                  <ArrowRight size={20} />
+                </span>
               </div>
             </Link>
           ))}
@@ -185,7 +191,7 @@ export default async function Home() {
               <a key={i} href="#" className={`block relative aspect-square group overflow-hidden rounded-2xl shadow-md ${(i === 3) ? 'hidden md:block' : ''} ${(i === 4) ? 'hidden lg:block' : ''}`}>
                 <Image src={img} alt={`Instagram ${i + 1}`} fill className="object-cover transition-transform duration-700 group-hover:scale-110" />
                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                  <span className="material-icons text-white text-3xl">favorite</span>
+                  <Heart size={30} className="text-white" fill="white" />
                 </div>
               </a>
             ))}

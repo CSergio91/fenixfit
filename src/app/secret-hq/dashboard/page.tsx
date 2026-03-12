@@ -89,7 +89,8 @@ export default async function DashboardPage() {
             change: `${salesGrowth >= 0 ? '+' : ''}${salesGrowth.toFixed(1)}%`,
             trend: salesGrowth >= 0 ? 'up' : 'down',
             icon: CreditCard,
-            color: 'text-emerald-400'
+            color: 'text-emerald-400',
+            href: '/secret-hq/orders'
         },
         {
             name: 'Pedidos Hoy',
@@ -97,7 +98,8 @@ export default async function DashboardPage() {
             change: `+${ordersToday || 0} hoy`,
             trend: 'up',
             icon: ShoppingBag,
-            color: 'text-blue-400'
+            color: 'text-blue-400',
+            href: '/secret-hq/orders'
         },
         {
             name: 'Clientes Totales',
@@ -105,7 +107,8 @@ export default async function DashboardPage() {
             change: `${customerGrowthPercentage >= 0 ? '+' : ''}${customerGrowthPercentage.toFixed(1)}%`,
             trend: customerGrowthPercentage >= 0 ? 'up' : 'down',
             icon: Users,
-            color: 'text-purple-400'
+            color: 'text-purple-400',
+            href: '/secret-hq/customers'
         },
         {
             name: 'Productos Activos',
@@ -113,7 +116,8 @@ export default async function DashboardPage() {
             change: outOfStockCount ? `${outOfStockCount} agotados` : 'Stock al día',
             trend: outOfStockCount && outOfStockCount > 0 ? 'down' : 'up',
             icon: Package,
-            color: 'text-amber-400'
+            color: 'text-amber-400',
+            href: '/secret-hq/products'
         },
     ];
 
@@ -136,7 +140,11 @@ export default async function DashboardPage() {
             {/* Main Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {stats.map((stat) => (
-                    <div key={stat.name} className="group bg-[#0a0a0a] border border-white/5 p-10 hover:border-white/20 transition-all duration-500 relative overflow-hidden h-64 flex flex-col justify-between">
+                    <Link
+                        key={stat.name}
+                        href={stat.href}
+                        className="group bg-[#0a0a0a] border border-white/5 p-10 hover:border-white/20 transition-all duration-500 relative overflow-hidden h-64 flex flex-col justify-between"
+                    >
                         <div className="absolute top-0 right-0 w-32 h-32 bg-white/[0.01] -translate-y-1/2 translate-x-1/2 rounded-full blur-3xl group-hover:bg-white/[0.05] transition-all" />
                         <div className={`w-14 h-14 bg-white/5 flex items-center justify-center rounded-sm ${stat.color} mb-8`}>
                             <stat.icon size={28} />
@@ -152,7 +160,7 @@ export default async function DashboardPage() {
                                 </span>
                             </div>
                         </div>
-                    </div>
+                    </Link>
                 ))}
             </div>
 
@@ -180,11 +188,20 @@ export default async function DashboardPage() {
                             </thead>
                             <tbody className="divide-y divide-white/5">
                                 {recentOrders?.map((order) => (
-                                    <tr key={order.id} className="group hover:bg-white/[0.02] transition-colors">
-                                        <td className="py-6 font-black font-display text-[13px] tracking-tight text-white/60">#{order.id.slice(0, 8).toUpperCase()}</td>
+                                    <tr
+                                        key={order.id}
+                                        className="group hover:bg-white/[0.02] transition-colors"
+                                    >
+                                        <td className="py-6 font-black font-display text-[13px] tracking-tight text-white/60 hover:text-white transition-colors">
+                                            <Link href="/secret-hq/orders" className="block w-full h-full">
+                                                #{order.id.slice(0, 8).toUpperCase()}
+                                            </Link>
+                                        </td>
                                         <td className="py-6">
-                                            <p className="text-[11px] font-bold uppercase tracking-widest">{order.customer_name || 'Guest'}</p>
-                                            <p className="text-[9px] text-white/20 font-medium tracking-tight uppercase">{order.customer_email}</p>
+                                            <Link href="/secret-hq/orders" className="block group/link">
+                                                <p className="text-[11px] font-bold uppercase tracking-widest group-hover/link:text-white transition-colors">{order.customer_name || 'Guest'}</p>
+                                                <p className="text-[9px] text-white/20 font-medium tracking-tight uppercase group-hover/link:text-white/40 transition-colors">{order.customer_email}</p>
+                                            </Link>
                                         </td>
                                         <td className="py-6">
                                             <span className={`text-[9px] font-black px-3 py-1.5 uppercase tracking-widest flex items-center w-fit ${['paid', 'confirmed', 'shipped'].includes(order.status) ? 'bg-emerald-400/10 text-emerald-400' : 'bg-amber-400/10 text-amber-400'
@@ -193,7 +210,7 @@ export default async function DashboardPage() {
                                                 {order.status === 'paid' ? 'Pagado' : order.status === 'confirmed' ? 'Confirmado' : order.status === 'shipped' ? 'Enviado' : 'Pendiente'}
                                             </span>
                                         </td>
-                                        <td className="py-6 text-right font-black font-display text-[14px]">${Number(order.total_amount).toFixed(2)}</td>
+                                        <td className="py-6 text-right font-black font-display text-[14px] italic">${Number(order.total_amount).toFixed(0)}</td>
                                     </tr>
                                 ))}
                                 {(!recentOrders || recentOrders.length === 0) && (
@@ -208,14 +225,19 @@ export default async function DashboardPage() {
 
                 {/* Stock Alerts Widget */}
                 <div className="bg-[#0a0a0a] border border-white/5 p-12">
-                    <div className="mb-10 pb-6 border-b border-white/5">
+                    <div className="mb-10 pb-6 border-b border-white/5 flex justify-between items-center">
                         <h3 className="text-[12px] font-black uppercase tracking-[0.3em] flex items-center">
                             <AlertCircle size={16} className="mr-4 text-rose-500" /> Alertas Críticas
                         </h3>
+                        <Link href="/secret-hq/products" className="text-[9px] font-black uppercase tracking-widest text-white/20 hover:text-white transition-all">Ver Inventario</Link>
                     </div>
                     <div className="space-y-6">
                         {lowStockProducts?.map((product) => (
-                            <div key={product.id} className="p-6 bg-white/5 border border-white/5 hover:border-rose-500/20 transition-all group">
+                            <Link
+                                key={product.id}
+                                href="/secret-hq/products"
+                                className="block p-6 bg-white/5 border border-white/5 hover:border-rose-500/20 transition-all group"
+                            >
                                 <div className="flex justify-between items-start mb-4">
                                     <p className="text-[10px] font-black uppercase tracking-widest group-hover:text-rose-500 transition-colors">{product.name}</p>
                                     <span className={`text-[11px] font-black px-2 py-0.5 ${product.stock <= 0 ? 'bg-rose-500 text-white' : 'bg-rose-500/10 text-rose-500'}`}>
@@ -228,7 +250,7 @@ export default async function DashboardPage() {
                                         style={{ width: `${Math.max(5, (product.stock / 10) * 100)}%` }}
                                     ></div>
                                 </div>
-                            </div>
+                            </Link>
                         ))}
                         {(!lowStockProducts || lowStockProducts.length === 0) && (
                             <div className="py-20 flex flex-col items-center justify-center text-center opacity-20">

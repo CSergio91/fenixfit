@@ -24,8 +24,9 @@ import {
     Save,
     Loader2,
     Tag,
+    Users,
 } from "lucide-react";
-import { globalSearch } from "@/app/actions/admin-actions";
+import { globalSearch, getCurrentUserRole } from "@/app/actions/admin-actions";
 
 interface UserProfile {
     id: string;
@@ -80,34 +81,9 @@ export default function AdminLayout({
                 });
                 setEditName(session.user.user_metadata?.full_name || session.user.user_metadata?.name || "");
 
-                // Fetch role
-                const { data: staff } = await supabase
-                    .from('staff')
-                    .select('role')
-                    .eq('email', session.user.email)
-                    .maybeSingle();
-
-                if (staff) {
-                    setRole(staff.role);
-                } else {
-                    // Check if it's the owner email from settings
-                    const { data: settings } = await supabase
-                        .from('store_settings')
-                        .select('contact_email')
-                        .single();
-
-                    if (settings?.contact_email === session.user.email) {
-                        setRole('owner');
-                        // Auto-create staff record for owner
-                        await supabase.from('staff').upsert({
-                            email: session.user.email,
-                            role: 'owner',
-                            full_name: session.user.user_metadata?.full_name || 'Owner'
-                        });
-                    } else {
-                        setRole('moderator');
-                    }
-                }
+                // Fetch role using Server Action to avoid RLS recursion
+                const userRole = await getCurrentUserRole();
+                setRole(userRole || 'moderator');
             }
             setIsAdmin(!!session);
         };
@@ -258,14 +234,15 @@ export default function AdminLayout({
         { name: 'Productos', href: '/secret-hq/products', icon: Package },
         { name: 'Categorías', href: '/secret-hq/categories', icon: Tag },
         { name: 'Pedidos', href: '/secret-hq/orders', icon: ShoppingBag },
+        { name: 'Clientes', href: '/secret-hq/customers', icon: Users },
         { name: 'Marketing', href: '/secret-hq/marketing', icon: Megaphone },
         { name: 'Configuración', href: '/secret-hq/settings', icon: Settings },
     ];
 
     const navItems = allNavItems.filter(item => {
         if (role === 'moderator') {
-            // Moderators can only see Dashboard, Products and Orders
-            return ['Dashboard', 'Productos', 'Pedidos'].includes(item.name);
+            // Moderators can only see Dashboard, Products, Orders and Customers
+            return ['Dashboard', 'Productos', 'Pedidos', 'Clientes'].includes(item.name);
         }
         return true;
     });
@@ -319,24 +296,19 @@ export default function AdminLayout({
                                 <Link
                                     key={item.name}
                                     href={item.href}
-                                    title={!isSidebarOpen ? item.name : undefined}
-                                    className={`flex items-center px-3 py-3 rounded-sm group transition-all duration-200 relative ${isActive
-                                        ? 'bg-white text-black'
-                                        : 'text-white/30 hover:text-white hover:bg-white/[0.04]'
+                                    className={`group flex items-center px-4 py-3.5 text-[11px] font-bold uppercase tracking-[0.2em] transition-all duration-300 relative ${isActive
+                                        ? "text-white bg-white/[0.08]"
+                                        : "text-white/40 hover:text-white hover:bg-white/[0.03]"
                                         }`}
                                 >
-                                    {isActive && (
-                                        <div className="absolute left-0 top-2 bottom-2 w-[2px] bg-black rounded-full" />
-                                    )}
                                     <Icon
-                                        size={18}
-                                        className={`shrink-0 transition-transform duration-200 ${isActive ? 'text-black' : 'group-hover:scale-110'}`}
+                                        size={22}
+                                        className={`mr-4 transition-transform duration-300 ${isActive ? "scale-110" : "group-hover:scale-110"
+                                            }`}
                                     />
-                                    <span className={`ml-3 text-[11px] font-black uppercase tracking-wider whitespace-nowrap overflow-hidden transition-all duration-300 ${isSidebarOpen ? 'max-w-[160px] opacity-100' : 'max-w-0 opacity-0'}`}>
-                                        {item.name}
-                                    </span>
-                                    {isActive && isSidebarOpen && (
-                                        <ChevronRight className="ml-auto shrink-0 text-black/40" size={14} />
+                                    <span className={isSidebarOpen ? "opacity-100" : "opacity-0 invisible"}>{item.name}</span>
+                                    {isActive && (
+                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-white" />
                                     )}
                                 </Link>
                             );
@@ -657,8 +629,8 @@ export default function AdminLayout({
             )}
 
             {/* ── Mobile Bottom Nav ── */}
-            <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#090909]/95 backdrop-blur-md border-t border-white/[0.06] z-50 pb-safe pb-4 pt-2 px-1">
-                <div className="flex justify-around items-center">
+            <nav className="lg:hidden fixed bottom-0 left-0 right-0 bg-[#090909]/95 backdrop-blur-md border-t border-white/[0.06] z-50 pb-safe pb-4 pt-2 overflow-x-auto no-scrollbar">
+                <div className="flex justify-start sm:justify-around items-center min-w-max px-4">
                     {navItems.map((item) => {
                         const isActive = pathname === item.href || pathname?.startsWith(item.href);
                         const Icon = item.icon;
@@ -666,10 +638,10 @@ export default function AdminLayout({
                             <Link
                                 key={item.name}
                                 href={item.href}
-                                className={`flex flex-col items-center justify-center p-2 min-w-[60px] transition-all duration-200 ${isActive ? 'text-white' : 'text-white/30 hover:text-white/70'}`}
+                                className={`flex flex-col items-center justify-center p-2 min-w-[75px] transition-all duration-200 ${isActive ? 'text-white' : 'text-white/30 hover:text-white/70'}`}
                             >
                                 <Icon size={20} className={`mb-1 transition-all ${isActive ? 'scale-110 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]' : ''}`} />
-                                <span className="text-[8px] font-black uppercase tracking-wider">{item.name.substring(0, 7) + (item.name.length > 7 ? '.' : '')}</span>
+                                <span className="text-[8px] font-black uppercase tracking-wider">{item.name}</span>
                             </Link>
                         );
                     })}

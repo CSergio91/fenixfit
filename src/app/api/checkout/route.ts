@@ -50,6 +50,7 @@ export async function POST(req: Request) {
                     size: it.size,
                     qty: it.quantity,
                     price: it.product.price,
+                    name: it.product.name
                 })))
             },
             shipping_address_collection: {

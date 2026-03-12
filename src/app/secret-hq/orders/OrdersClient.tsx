@@ -214,73 +214,75 @@ export default function OrdersClient({ initialOrders, currency, role }: { initia
             </div>
 
             {/* ── Table + Detail Panel ── */}
-            <div className="flex gap-6">
+            <div className="flex flex-col lg:flex-row gap-6">
                 {/* Table */}
-                <div className={`bg-[#0a0a0a] border border-white/5 overflow-hidden transition-all duration-500 ${selectedOrder ? 'flex-1' : 'w-full'}`}>
-                    {filteredOrders.length === 0 ? (
-                        <div className="py-40 text-center flex flex-col items-center">
-                            <ShoppingBag size={48} className="text-white/10 mb-6" />
-                            <h3 className="font-display text-3xl font-black italic text-white/40">Sin pedidos</h3>
-                        </div>
-                    ) : (
-                        <table className="w-full text-left">
-                            <thead>
-                                <tr className="bg-white/5 text-white/30 text-[9px] uppercase tracking-widest font-black">
-                                    <th className="px-6 py-5 border-b border-white/5">Pedido</th>
-                                    {!selectedOrder && <th className="px-6 py-5 border-b border-white/5">Cliente</th>}
-                                    <th className="px-6 py-5 border-b border-white/5">Estado</th>
-                                    <th className="px-6 py-5 border-b border-white/5 text-right">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5">
-                                {filteredOrders.map(order => {
-                                    const status = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending
-                                    const StatusIcon = status.icon
-                                    const MethodIcon = METHOD_ICON[order.checkout_method] || CreditCard
-                                    const isSelected = selectedOrder?.id === order.id
-                                    const isLoading = loadingId === order.id
+                <div className={`bg-[#0a0a0a] border border-white/5 overflow-x-auto transition-all duration-500 ${selectedOrder ? 'flex-1' : 'w-full'}`}>
+                    <div className="min-w-[600px] lg:min-w-0">
+                        {filteredOrders.length === 0 ? (
+                            <div className="py-40 text-center flex flex-col items-center">
+                                <ShoppingBag size={48} className="text-white/10 mb-6" />
+                                <h3 className="font-display text-3xl font-black italic text-white/40">Sin pedidos</h3>
+                            </div>
+                        ) : (
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="bg-white/5 text-white/30 text-[9px] uppercase tracking-widest font-black">
+                                        <th className="px-6 py-5 border-b border-white/5">Pedido</th>
+                                        {!selectedOrder && <th className="px-6 py-5 border-b border-white/5">Cliente</th>}
+                                        <th className="px-6 py-5 border-b border-white/5">Estado</th>
+                                        <th className="px-6 py-5 border-b border-white/5 text-right">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {filteredOrders.map(order => {
+                                        const status = STATUS_CONFIG[order.status] || STATUS_CONFIG.pending
+                                        const StatusIcon = status.icon
+                                        const MethodIcon = METHOD_ICON[order.checkout_method] || CreditCard
+                                        const isSelected = selectedOrder?.id === order.id
+                                        const isLoading = loadingId === order.id
 
-                                    return (
-                                        <tr
-                                            key={order.id}
-                                            onClick={() => setSelectedOrder(isSelected ? null : order)}
-                                            className={`cursor-pointer transition-colors ${isSelected ? 'bg-white/5' : 'hover:bg-white/[0.02]'}`}
-                                        >
-                                            <td className="px-6 py-5">
-                                                <div className="flex items-center space-x-2 mb-1">
-                                                    <MethodIcon size={12} className="text-white/30" />
-                                                    <p className="font-black text-[11px] text-white/60">#{order.id.slice(0, 6).toUpperCase()}</p>
-                                                </div>
-                                                <p className="text-[9px] text-white/20 uppercase tracking-wider">
-                                                    {new Date(order.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
-                                                </p>
-                                            </td>
-                                            {!selectedOrder && (
+                                        return (
+                                            <tr
+                                                key={order.id}
+                                                onClick={() => setSelectedOrder(isSelected ? null : order)}
+                                                className={`cursor-pointer transition-colors ${isSelected ? 'bg-white/5' : 'hover:bg-white/[0.02]'}`}
+                                            >
                                                 <td className="px-6 py-5">
-                                                    <p className="text-[11px] font-bold text-white/70">{order.customer_name || 'Guest'}</p>
-                                                    <p className="text-[9px] text-white/25">{order.customer_email}</p>
+                                                    <div className="flex items-center space-x-2 mb-1">
+                                                        <MethodIcon size={12} className="text-white/30" />
+                                                        <p className="font-black text-[11px] text-white/60">#{order.id.slice(0, 6).toUpperCase()}</p>
+                                                    </div>
+                                                    <p className="text-[9px] text-white/20 uppercase tracking-wider">
+                                                        {new Date(order.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' })}
+                                                    </p>
                                                 </td>
-                                            )}
-                                            <td className="px-6 py-5">
-                                                <div className={`inline-flex items-center space-x-1.5 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest ${status.bg}`}>
-                                                    {isLoading ? <Loader2 size={10} className="animate-spin" /> : <StatusIcon size={10} />}
-                                                    <span className={status.color}>{selectedOrder ? status.label.split(' ')[0] : status.label}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-5 text-right">
-                                                <p className="font-display font-black text-lg italic">{currency === 'EUR' ? '€' : '$'}{Number(order.total_amount).toFixed(2)}</p>
-                                            </td>
-                                        </tr>
-                                    )
-                                })}
-                            </tbody>
-                        </table>
-                    )}
+                                                {!selectedOrder && (
+                                                    <td className="px-6 py-5">
+                                                        <p className="text-[11px] font-bold text-white/70">{order.customer_name || 'Guest'}</p>
+                                                        <p className="text-[9px] text-white/25">{order.customer_email}</p>
+                                                    </td>
+                                                )}
+                                                <td className="px-6 py-5">
+                                                    <div className={`inline-flex items-center space-x-1.5 px-2.5 py-1.5 text-[9px] font-black uppercase tracking-widest ${status.bg}`}>
+                                                        {isLoading ? <Loader2 size={10} className="animate-spin" /> : <StatusIcon size={10} />}
+                                                        <span className={status.color}>{selectedOrder ? status.label.split(' ')[0] : status.label}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-5 text-right">
+                                                    <p className="font-display font-black text-lg italic">{currency === 'EUR' ? '€' : '$'}{Number(order.total_amount).toFixed(2)}</p>
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
                 </div>
 
                 {/* ── Detail Panel ── */}
                 {selectedOrder && (
-                    <div className="w-96 shrink-0 bg-[#0a0a0a] border border-white/5 flex flex-col animate-in slide-in-from-right-4 duration-300">
+                    <div className="w-full lg:w-96 shrink-0 bg-[#0a0a0a] border border-white/5 flex flex-col animate-in slide-in-from-right-4 duration-300">
                         {/* Panel header */}
                         <div className="flex items-center justify-between px-6 py-5 border-b border-white/5">
                             <div>

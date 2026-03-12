@@ -2,6 +2,7 @@ import { headers } from 'next/headers';
 import { NextResponse } from 'next/server';
 import Stripe from 'stripe';
 import { createAdminClient } from '@/lib/supabase/server';
+import { sendOrderConfirmationEmail, sendNewOrderAdminNotification } from '@/lib/resend';
 
 // Force dynamic so Vercel doesn't try to pre-render this route at build time
 export const dynamic = 'force-dynamic';
@@ -83,6 +84,39 @@ export async function POST(req: Request) {
                 const newStock = Math.max(0, (product.stock || 0) - item.qty);
                 await supabase.from('products').update({ stock: newStock }).eq('id', item.p_id);
             }
+        }
+
+        // 4. Send Confirmation Email to Customer
+        try {
+            await sendOrderConfirmationEmail({
+                email: session.customer_details?.email || '',
+                orderNumber: order.id.slice(0, 8).toUpperCase(),
+                customerName: session.customer_details?.name || 'Cliente',
+                totalAmount: (session.amount_total || 0) / 100,
+                items: items.map((it: any) => ({
+                    name: it.name || 'Producto',
+                    size: it.size,
+                    quantity: it.qty,
+                    price: it.price
+                }))
+            })
+        } catch (emailErr) {
+            console.error('Customer Email Error:', emailErr)
+        }
+
+        // 5. Notify Admin
+        try {
+            const { data: settings } = await supabase.from('store_settings').select('contact_email').single()
+            if (settings?.contact_email) {
+                await sendNewOrderAdminNotification({
+                    adminEmail: settings.contact_email,
+                    orderNumber: order.id.slice(0, 8).toUpperCase(),
+                    customerName: session.customer_details?.name || 'Cliente',
+                    totalAmount: (session.amount_total || 0) / 100
+                })
+            }
+        } catch (adminErr) {
+            console.error('Admin Notification Error:', adminErr)
         }
     }
 

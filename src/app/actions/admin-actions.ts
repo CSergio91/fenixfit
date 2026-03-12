@@ -3,6 +3,12 @@
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
+import {
+    sendOrderConfirmationEmail,
+    sendPromotionalEmail as resendPromo,
+    sendOrderStatusUpdateEmail,
+    sendNewOrderAdminNotification
+} from '@/lib/resend'
 
 // ─── PRODUCTS ─────────────────────────────────────────────────────────────────
 export async function upsertProduct(productData: any, variantsData: any[]) {
@@ -76,16 +82,45 @@ export async function adjustStock(productId: string, delta: number) {
 
 // ─── ORDERS ───────────────────────────────────────────────────────────────────
 export async function updateOrderStatus(orderId: string, status: string) {
-    const supabase = await createClient()
+    const role = await getCurrentUserRole()
+    if (!role) throw new Error('Unauthorized')
+
+    const supabase = await createAdminClient()
+
+    // Fetch order details before update to send email
+    const { data: order } = await supabase
+        .from('orders')
+        .select('customer_email, customer_name, id')
+        .eq('id', orderId)
+        .single()
+
     const { error } = await supabase.from('orders').update({ status }).eq('id', orderId)
     if (error) throw new Error(error.message)
+
+    // Notify customer
+    if (order?.customer_email) {
+        try {
+            await sendOrderStatusUpdateEmail({
+                email: order.customer_email,
+                orderNumber: (order.id as string).slice(0, 8).toUpperCase(),
+                customerName: order.customer_name,
+                newStatus: status
+            })
+        } catch (e) {
+            console.error('Error sending status update email:', e)
+        }
+    }
+
     revalidatePath('/secret-hq/orders')
     revalidatePath('/secret-hq/dashboard')
     return { success: true }
 }
 
 export async function deleteOrder(orderId: string) {
-    const supabase = await createClient()
+    const role = await getCurrentUserRole()
+    if (!role) throw new Error('Unauthorized')
+
+    const supabase = await createAdminClient()
     await supabase.from('order_items').delete().eq('order_id', orderId)
     const { error } = await supabase.from('orders').delete().eq('id', orderId)
     if (error) throw new Error(error.message)
@@ -96,14 +131,22 @@ export async function deleteOrder(orderId: string) {
 
 // Confirm WhatsApp order: set to 'confirmed' and deduct stock
 export async function confirmWhatsappOrder(orderId: string) {
-    const supabase = await createClient()
-    const { data: items, error: itemsErr } = await supabase
-        .from('order_items')
-        .select('*, products(stock)')
-        .eq('order_id', orderId)
-    if (itemsErr) throw new Error(itemsErr.message)
+    const role = await getCurrentUserRole()
+    if (!role) throw new Error('Unauthorized')
 
-    for (const item of items || []) {
+    const supabase = await createAdminClient()
+
+    // Fetch order and items
+    const { data: order, error: orderErr } = await supabase
+        .from('orders')
+        .select('*, order_items(*, products(name, price, stock))')
+        .eq('id', orderId)
+        .single()
+
+    if (orderErr) throw new Error(orderErr.message)
+
+    // Deduct stock
+    for (const item of order.order_items || []) {
         const currentStock = item.products?.stock || 0
         const newStock = Math.max(0, currentStock - (item.quantity || 1))
         await supabase.from('products').update({ stock: newStock }).eq('id', item.product_id)
@@ -112,9 +155,35 @@ export async function confirmWhatsappOrder(orderId: string) {
     const { error } = await supabase.from('orders').update({ status: 'confirmed' }).eq('id', orderId)
     if (error) throw new Error(error.message)
 
+    // Send Confirmation Email to Customer
+    try {
+        await sendOrderConfirmationEmail({
+            email: order.customer_email,
+            orderNumber: (order.id as string).slice(0, 8).toUpperCase(),
+            customerName: order.customer_name,
+            totalAmount: order.total_amount,
+            items: order.order_items.map((item: any) => ({
+                name: item.products?.name || 'Producto',
+                size: item.size,
+                quantity: item.quantity,
+                price: item.price_at_time
+            }))
+        })
+    } catch (e) {
+        console.error('Error sending confirmation email:', e)
+    }
+
+    // Automatically save as customer if confirmed
+    try {
+        await saveAsCustomer(orderId)
+    } catch (e) {
+        console.error('Error saving as customer during confirmation:', e)
+    }
+
     revalidatePath('/secret-hq/orders')
     revalidatePath('/secret-hq/products')
     revalidatePath('/secret-hq/dashboard')
+    revalidatePath('/secret-hq/customers')
     return { success: true }
 }
 
@@ -160,6 +229,21 @@ export async function createWhatsappOrder(orderData: {
             price_at_time: item.price,
         }))
     )
+
+    // Notify Admin about NEW order
+    try {
+        const { data: settings } = await supabase.from('store_settings').select('contact_email').single()
+        if (settings?.contact_email) {
+            await sendNewOrderAdminNotification({
+                adminEmail: settings.contact_email,
+                orderNumber: order.id.slice(0, 8).toUpperCase(),
+                customerName: order.customer_name,
+                totalAmount: order.total_amount
+            })
+        }
+    } catch (e) {
+        console.error('Error sending admin notification:', e)
+    }
 
     revalidatePath('/secret-hq/orders')
     return order
@@ -385,16 +469,92 @@ export async function saveAsCustomer(orderId: string) {
 
     revalidatePath('/secret-hq/dashboard')
     revalidatePath('/secret-hq/orders')
+    revalidatePath('/secret-hq/customers')
+}
+
+export async function getCustomers() {
+    const role = await getCurrentUserRole()
+    if (!role) throw new Error('Unauthorized')
+
+    const supabase = await createAdminClient()
+    const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return data || []
+}
+
+export async function getCustomerOrders(customerId: string) {
+    const role = await getCurrentUserRole()
+    if (!role) throw new Error('Unauthorized')
+
+    const supabase = await createAdminClient()
+    const { data, error } = await supabase
+        .from('orders')
+        .select('*')
+        .eq('customer_id', customerId)
+        .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return data || []
+}
+
+export async function updateCustomer(customerId: string, customerData: any) {
+    const role = await getCurrentUserRole()
+    if (!role) throw new Error('Unauthorized')
+
+    const supabase = await createAdminClient()
+    const { data, error } = await supabase
+        .from('customers')
+        .update({
+            name: customerData.name,
+            phone: customerData.phone,
+            email: customerData.email,
+            accepts_marketing: customerData.accepts_marketing,
+            updated_at: new Date().toISOString()
+        })
+        .eq('id', customerId)
+        .select()
+        .single()
+    if (error) throw new Error(error.message)
+    revalidatePath('/secret-hq/customers')
+    return data
+}
+
+export async function deleteCustomer(customerId: string) {
+    const supabase = await createClient()
+    // Unlink orders first
+    await supabase.from('orders').update({ customer_id: null }).eq('customer_id', customerId)
+    const { error } = await supabase.from('customers').delete().eq('id', customerId)
+    if (error) throw new Error(error.message)
+    revalidatePath('/secret-hq/customers')
+    return { success: true }
 }
 
 // ─── STAFF MANAGEMENT ────────────────────────────────────────────────────────
 
+
+export async function sendPromotionalEmail(customerEmail: string, promo: any) {
+    const result = await resendPromo({
+        email: customerEmail,
+        promoTitle: promo.title,
+        promoDescription: promo.description,
+        promoImage: promo.image_url,
+        targetUrl: promo.target_url
+    })
+
+    if (!result.success) throw new Error('Error al enviar el correo')
+    return { success: true }
+}
+
 export async function getCurrentUserRole() {
     try {
-        const supabase = await createClient()
-        const { data: { user } } = await supabase.auth.getUser()
+        const publicClient = await createClient() // Use public client for auth
+        const { data: { user } } = await publicClient.auth.getUser()
         if (!user) return null
 
+        // Use Admin Client to read staff table to avoid RLS recursion
+        const supabase = await createAdminClient()
         const { data: staff } = await supabase
             .from('staff')
             .select('role')
@@ -420,7 +580,8 @@ export async function getCurrentUserRole() {
         }
 
         return staff?.role || null
-    } catch {
+    } catch (e) {
+        console.error('getCurrentUserRole Error:', e)
         return null
     }
 }
@@ -476,7 +637,7 @@ export async function removeStaffMember(email: string) {
 
 
 export async function globalSearch(query: string) {
-    if (!query || query.length < 2) return { products: [], orders: [] }
+    if (!query || query.length < 2) return { products: [], orders: [], customers: [] }
 
     const supabase = await createClient()
 
@@ -494,8 +655,16 @@ export async function globalSearch(query: string) {
         .or(`customer_name.ilike.%${query}%,customer_email.ilike.%${query}%`)
         .limit(5)
 
+    // Search customers
+    const { data: customers } = await supabase
+        .from('customers')
+        .select('id, name, email')
+        .or(`name.ilike.%${query}%,email.ilike.%${query}%`)
+        .limit(5)
+
     return {
         products: products || [],
-        orders: orders || []
+        orders: orders || [],
+        customers: customers || []
     }
 }

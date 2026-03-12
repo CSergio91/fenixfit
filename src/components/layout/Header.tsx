@@ -4,9 +4,10 @@ import Link from "next/link";
 import Image from "next/image";
 import { useCartStore } from "@/store/useCartStore";
 import { useEffect, useState, useRef } from "react";
+import { usePathname } from "next/navigation";
 import { getPublicSettings, globalSearch } from "@/app/actions/admin-actions";
 import { useSettingsStore } from "@/store/useSettingsStore";
-import { Search, X, Loader2, ArrowRight } from "lucide-react";
+import { Search, X, Loader2, ArrowRight, Menu, User, ShoppingBag as ShoppingBagIcon } from "lucide-react";
 
 export function Header() {
     const items = useCartStore((state) => state.items);
@@ -16,13 +17,19 @@ export function Header() {
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState("");
     const [searchResults, setSearchResults] = useState<any[]>([]);
-    const [isSearching, setIsSearching] = useState(false);
+    const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    const pathname = usePathname();
 
     useEffect(() => {
         setMounted(true);
         fetchSettings();
     }, []);
+
+    // Hide Header on internal CRM routes
+    if (pathname && pathname.startsWith("/secret-hq")) {
+        return null;
+    }
 
     useEffect(() => {
         if (isSearchOpen) {
@@ -35,7 +42,7 @@ export function Header() {
             if (searchQuery.length >= 2) {
                 setIsSearching(true);
                 const results = await globalSearch(searchQuery);
-                setSearchResults(results.products);
+                setSearchResults(results.products || []);
                 setIsSearching(false);
             } else {
                 setSearchResults([]);
@@ -76,16 +83,19 @@ export function Header() {
 
                         {/* Mobile Menu Icon */}
                         <div className="flex items-center md:hidden">
-                            <button type="button" className="text-primary hover:text-primary/60">
-                                <span className="material-icons">menu</span>
+                            <button
+                                type="button"
+                                onClick={() => setIsMobileMenuOpen(true)}
+                                className="text-primary hover:text-primary/60"
+                            >
+                                <Menu size={24} />
                             </button>
                         </div>
 
-                        {/* Logo - Centered and responsive */}
                         <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center w-full max-w-[120px] md:max-w-[160px] h-full py-2">
                             <Link href="/" className="relative w-full h-full flex items-center justify-center transition-opacity hover:opacity-80">
                                 <Image
-                                    src="/fenix-logo-black.png"
+                                    src="/logo.jpg"
                                     alt="Fenix Fit Logo"
                                     fill
                                     className="object-contain"
@@ -103,13 +113,13 @@ export function Header() {
                                 <Search size={20} />
                             </button>
                             <button className="hidden md:block text-primary hover:text-primary/60 transition-colors">
-                                <span className="material-icons text-[20px]">person_outline</span>
+                                <User size={20} />
                             </button>
                             <button
                                 onClick={() => setIsOpen(true)}
                                 className="text-primary hover:text-primary/60 transition-colors relative"
                             >
-                                <span className="material-icons text-[20px]">shopping_bag</span>
+                                <ShoppingBagIcon size={20} />
                                 {mounted && cartCount > 0 && (
                                     <span className="absolute -top-1.5 -right-2 bg-primary text-white text-[9px] font-black px-1.5 py-0.5 rounded-full min-w-[18px]">
                                         {cartCount}
@@ -120,6 +130,40 @@ export function Header() {
                     </div>
                 </div>
             </header>
+
+            {/* Mobile Navigation Menu */}
+            {isMobileMenuOpen && (
+                <div className="fixed inset-0 z-[100] bg-white animate-in fade-in slide-in-from-top duration-300">
+                    <div className="flex justify-between items-center p-6 border-b border-primary/5">
+                        <Link href="/" onClick={() => setIsMobileMenuOpen(false)} className="relative w-[100px] h-[30px]">
+                            <Image src="/logo.jpg" alt="Fenix Fit Logo" fill className="object-contain object-left" />
+                        </Link>
+                        <button onClick={() => setIsMobileMenuOpen(false)} className="text-primary">
+                            <X size={28} />
+                        </button>
+                    </div>
+                    <nav className="flex flex-col p-8 space-y-8 mt-4">
+                        <Link href="/collections" onClick={() => setIsMobileMenuOpen(false)} className="text-2xl font-display font-light uppercase tracking-widest text-primary hover:text-primary/60 transition-colors">
+                            Shop
+                        </Link>
+                        <div className="w-12 h-px bg-primary/10"></div>
+                        <Link href="/collections" onClick={() => setIsMobileMenuOpen(false)} className="text-2xl font-display font-light uppercase tracking-widest text-primary hover:text-primary/60 transition-colors">
+                            Collections
+                        </Link>
+                        <div className="w-12 h-px bg-primary/10"></div>
+                        <Link href="#" onClick={() => setIsMobileMenuOpen(false)} className="text-2xl font-display font-light uppercase tracking-widest text-primary hover:text-primary/60 transition-colors">
+                            Community
+                        </Link>
+                    </nav>
+                    <div className="absolute bottom-10 left-8 right-8 flex justify-between items-center text-[10px] font-bold uppercase tracking-widest text-primary/40">
+                        <span>© 2024 Fenix Fit</span>
+                        <div className="flex space-x-6 text-primary">
+                            <ShoppingBagIcon size={20} />
+                            <User size={20} />
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* Search Overlay */}
             {isSearchOpen && (

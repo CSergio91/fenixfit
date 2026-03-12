@@ -3,7 +3,7 @@
 import { useState, useMemo } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { SlidersHorizontal, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { SlidersHorizontal, X, ChevronDown, ChevronUp, Share2 } from 'lucide-react'
 
 interface CategoryColor { name: string; hex: string }
 interface Category {
@@ -116,13 +116,13 @@ export default function CollectionsClient({
     }
 
     const FiltersPanel = () => (
-        <div className="sticky top-36">
+        <div className="md:sticky md:top-36">
             {/* Category */}
             <FilterSection title="Categoría">
                 <ul className="space-y-3">
                     <li>
                         <button
-                            onClick={() => { setActiveCategory('all'); setActiveSizes([]); setActiveColors([]) }}
+                            onClick={() => { setActiveCategory('all'); setActiveSizes([]); setActiveColors([]); if (showMobileFilters) setShowMobileFilters(false); }}
                             className={`text-[12px] tracking-wide transition-all uppercase block ${activeCategory === 'all' ? 'font-black text-primary translate-x-1' : 'font-medium text-muted-light hover:text-primary hover:translate-x-1'}`}
                         >
                             Todos
@@ -131,7 +131,7 @@ export default function CollectionsClient({
                     {activeCategories.map(cat => (
                         <li key={cat.id}>
                             <button
-                                onClick={() => { setActiveCategory(cat.slug); setActiveSizes([]); setActiveColors([]) }}
+                                onClick={() => { setActiveCategory(cat.slug); setActiveSizes([]); setActiveColors([]); if (showMobileFilters) setShowMobileFilters(false); }}
                                 className={`text-[12px] tracking-wide transition-all uppercase block text-left ${activeCategory === cat.slug ? 'font-black text-primary translate-x-1' : 'font-medium text-muted-light hover:text-primary hover:translate-x-1'}`}
                             >
                                 {cat.name}
@@ -274,7 +274,7 @@ export default function CollectionsClient({
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-10 gap-y-16">
                             {filtered.map((product) => {
                                 const variant = product.variants[0]
-                                const isHotSale = product.original_price && product.original_price > product.price
+                                const isHotSale = Boolean(product.original_price && product.original_price > product.price)
                                 return (
                                     <div key={product.id} className="group relative">
                                         <div className="relative w-full aspect-[3/4] overflow-hidden bg-gray-50 mb-6 shadow-sm">
@@ -295,11 +295,33 @@ export default function CollectionsClient({
                                                 </Link>
                                             </div>
                                             <div className="absolute top-6 left-6 flex flex-col space-y-2">
-                                                {product.badges?.map((badge: string, idx: number) => (
-                                                    <span key={idx} className="bg-primary text-white text-[9px] font-black px-2.5 py-1.5 uppercase tracking-widest">{badge}</span>
-                                                ))}
-                                                {isHotSale && <span className="bg-red-600 text-white text-[9px] font-black px-2.5 py-1.5 uppercase tracking-widest">Sale</span>}
+                                                {product.badges && Array.isArray(product.badges) && product.badges.map((badge: string, idx: number) => {
+                                                    if (badge === '0' || badge === '' || badge === null) return null;
+                                                    return (
+                                                        <span key={idx} className="bg-primary text-white text-[9px] font-black px-2.5 py-1.5 uppercase tracking-widest self-start">{badge}</span>
+                                                    )
+                                                })}
+                                                {isHotSale && <span className="bg-red-600 text-white text-[9px] font-black px-2.5 py-1.5 uppercase tracking-widest self-start">Sale</span>}
                                             </div>
+                                            {/* Share Button on Card */}
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    if (navigator.share) {
+                                                        navigator.share({
+                                                            title: product.name,
+                                                            url: `${window.location.origin}/product/${product.id}`
+                                                        });
+                                                    } else {
+                                                        navigator.clipboard.writeText(`${window.location.origin}/product/${product.id}`);
+                                                        alert('¡Enlace copiado!');
+                                                    }
+                                                }}
+                                                className="absolute top-6 right-6 w-8 h-8 bg-white/80 backdrop-blur-md rounded-full flex items-center justify-center text-primary opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-white shadow-lg"
+                                            >
+                                                <Share2 size={14} />
+                                            </button>
                                         </div>
                                         {product.variants.length > 1 && (
                                             <div className="flex space-x-2 mb-4">
@@ -325,11 +347,11 @@ export default function CollectionsClient({
                                                 <div className="text-right">
                                                     {isHotSale ? (
                                                         <div className="flex items-center space-x-3">
-                                                            <p className="text-[14px] font-black font-display text-red-600">${product.price}</p>
-                                                            <p className="text-[12px] text-muted-light font-medium line-through">${product.original_price}</p>
+                                                            <p className="text-[14px] font-black font-display text-red-600">{product.price}€</p>
+                                                            <p className="text-[12px] text-muted-light font-medium line-through">{product.original_price}€</p>
                                                         </div>
                                                     ) : (
-                                                        <p className="text-[14px] font-black font-display text-primary">${product.price}</p>
+                                                        <p className="text-[14px] font-black font-display text-primary">{product.price}€</p>
                                                     )}
                                                 </div>
                                             </div>
