@@ -11,7 +11,7 @@ interface MarketingModalProps {
     onSuccess?: (asset: any) => void
 }
 
-export default function MarketingModal({ asset, products, onClose }: MarketingModalProps) {
+export default function MarketingModal({ asset, products, onClose, onSuccess }: MarketingModalProps) {
     const [loading, setLoading] = useState(false)
     const [formData, setFormData] = useState<any>({
         id: asset?.id || null,
