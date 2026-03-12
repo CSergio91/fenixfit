@@ -103,7 +103,7 @@ function ImageField({
 }
 
 // ─── Main Modal ──────────────────────────────────────────────────────────────
-export default function ProductModal({ product, categories, currency, onClose }: ProductModalProps) {
+export default function ProductModal({ product, categories, currency, onClose, onSuccess }: ProductModalProps) {
     const [loading, setLoading] = useState(false)
     const [activeVariantIdx, setActiveVariantIdx] = useState(0)
     const [showColorPalette, setShowColorPalette] = useState<number | null>(null)
