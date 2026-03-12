@@ -26,7 +26,7 @@ import {
     Tag,
     Users,
 } from "lucide-react";
-import { globalSearch, getCurrentUserRole } from "@/app/actions/admin-actions";
+import { globalSearch, getCurrentUserRole, sendTestEmail, createTestNotification } from "@/app/actions/admin-actions";
 
 interface UserProfile {
     id: string;
@@ -62,6 +62,16 @@ export default function AdminLayout({
     const userMenuRef = useRef<HTMLDivElement>(null);
     const notificationsRef = useRef<HTMLDivElement>(null);
     const searchRef = useRef<HTMLDivElement>(null);
+    const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+    const [soundEnabled, setSoundEnabled] = useState(true);
+
+    // Load preferences
+    useEffect(() => {
+        const savedNotif = localStorage.getItem('fenix_notif_enabled');
+        const savedSound = localStorage.getItem('fenix_sound_enabled');
+        if (savedNotif !== null) setNotificationsEnabled(savedNotif === 'true');
+        if (savedSound !== null) setSoundEnabled(savedSound === 'true');
+    }, []);
 
     const isAccessPage = !!(pathname && pathname.includes("/secret-hq/access"));
 
@@ -97,17 +107,29 @@ export default function AdminLayout({
                 schema: 'public',
                 table: 'notifications'
             }, (payload) => {
+                console.log('🔔 NUEVA NOTIFICACIÓN RECIBIDA:', payload.new);
                 setNotifications(prev => [payload.new, ...prev]);
-                // Play striking "Cash Register" sound
-                try {
-                    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2012/2012-preview.mp3');
-                    audio.volume = 0.7;
-                    audio.play();
-                } catch (e) {
-                    console.log('Audio error:', e);
+
+                // Play striking "Cash Register" sound if enabled
+                const isSoundOn = localStorage.getItem('fenix_sound_enabled') !== 'false';
+                const isNotifOn = localStorage.getItem('fenix_notif_enabled') !== 'false';
+
+                if (isNotifOn && isSoundOn) {
+                    try {
+                        const audio = new Audio(`https://assets.mixkit.co/active_storage/sfx/2000/2000-preview.mp3?t=${Date.now()}`);
+                        audio.volume = 0.5;
+                        audio.play();
+                    } catch (e) {
+                        console.log('Audio error:', e);
+                    }
                 }
             })
-            .subscribe();
+            .subscribe((status) => {
+                console.log('📡 REAL-TIME STATUS:', status);
+                if (status === 'CHANNEL_ERROR') {
+                    console.error('❌ Error de conexión al canal de notificaciones. Reintentando...');
+                }
+            });
 
         // Initial fetch of unread notifications
         const fetchUnread = async () => {
@@ -416,20 +438,103 @@ export default function AdminLayout({
 
                             {/* Notifications Dropdown */}
                             {showNotifications && (
-                                <div className="absolute right-0 top-full mt-2 w-80 bg-[#0d0d0d] border border-white/10 shadow-2xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                                    <div className="px-5 py-4 border-b border-white/5 flex justify-between items-center">
-                                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Notificaciones</p>
-                                        {notifications.length > 0 && (
+                                <div className="fixed sm:absolute right-4 sm:right-0 top-[72px] sm:top-full mt-2 w-[calc(100vw-32px)] sm:w-80 bg-[#0d0d0d] border border-white/10 shadow-2xl z-[100] overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200 backdrop-blur-xl">
+                                    <div className="px-5 py-4 border-b border-white/5 flex justify-between items-center bg-white/[0.02]">
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-white">Notificaciones</p>
+                                            <p className="text-[8px] text-white/30 uppercase tracking-widest mt-0.5">Alertas del sistema</p>
+                                        </div>
+                                        <div className="flex items-center space-x-3">
+                                            {notifications.length > 0 && (
+                                                <button
+                                                    onClick={async () => {
+                                                        const { error } = await supabase.from('notifications').update({ is_read: true }).in('id', notifications.map(n => n.id));
+                                                        if (!error) setNotifications([]);
+                                                    }}
+                                                    className="text-[8px] font-black uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-colors"
+                                                >
+                                                    Limpiar
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Preference Toggles (New) */}
+                                    <div className="px-5 py-3 border-b border-white/5 flex items-center justify-between text-[9px] font-bold tracking-widest text-white/40 uppercase">
+                                        <div className="flex items-center space-x-4">
                                             <button
-                                                onClick={async () => {
-                                                    await supabase.from('notifications').update({ is_read: true }).in('id', notifications.map(n => n.id));
-                                                    setNotifications([]);
+                                                onClick={() => {
+                                                    const newVal = !notificationsEnabled;
+                                                    setNotificationsEnabled(newVal);
+                                                    localStorage.setItem('fenix_notif_enabled', String(newVal));
                                                 }}
-                                                className="text-[8px] font-black uppercase tracking-widest text-emerald-400 hover:text-emerald-300"
+                                                className={`flex items-center space-x-2 transition-colors ${notificationsEnabled ? 'text-emerald-400' : 'text-white/20'}`}
                                             >
-                                                Marcar todo como leído
+                                                <div className={`w-2 h-2 rounded-full ${notificationsEnabled ? 'bg-emerald-400 animate-pulse' : 'bg-white/10'}`} />
+                                                <span>{notificationsEnabled ? 'Activas' : 'Pausadas'}</span>
                                             </button>
-                                        )}
+                                            <button
+                                                onClick={() => {
+                                                    const newVal = !soundEnabled;
+                                                    setSoundEnabled(newVal);
+                                                    localStorage.setItem('fenix_sound_enabled', String(newVal));
+                                                }}
+                                                className={`flex items-center space-x-2 transition-colors ${soundEnabled ? 'text-emerald-400' : 'text-white/20'}`}
+                                            >
+                                                <div className={`w-2 h-2 rounded-full ${soundEnabled ? 'bg-emerald-400' : 'bg-white/10'}`} />
+                                                <span>Sonido</span>
+                                            </button>
+                                        </div>
+                                        <span className="text-[8px] opacity-30 italic">v1.2.0</span>
+                                    </div>
+
+                                    {/* Test Controls */}
+                                    <div className="px-5 py-3 border-b border-white/5 bg-white/[0.01] grid grid-cols-2 gap-2">
+                                        <button
+                                            onClick={async () => {
+                                                try {
+                                                    await createTestNotification();
+                                                } catch (err) {
+                                                    console.error(err);
+                                                }
+                                            }}
+                                            className="px-3 py-2 bg-white/[0.05] hover:bg-white/[0.1] border border-white/10 text-[8px] font-black uppercase tracking-widest text-white/60 hover:text-white transition-all text-center"
+                                        >
+                                            Test Notif
+                                        </button>
+                                        <button
+                                            onClick={async () => {
+                                                if (!user?.email) return;
+
+                                                const trySend = async (fromAddress?: string) => {
+                                                    try {
+                                                        const res = await sendTestEmail(user.email, fromAddress);
+                                                        if (res.success) {
+                                                            alert(`✅ ¡EXITO! Correo enviado desde: ${fromAddress || 'pedidos@fenixfit.es'}\n\nRevisa tu bandeja de entrada.`);
+                                                            return true;
+                                                        } else {
+                                                            const errorMsg = (res.error as any)?.message || "";
+                                                            if (!fromAddress && (errorMsg.includes("unverified") || errorMsg.includes("verify") || errorMsg.includes("onboarding"))) {
+                                                                const retry = confirm("❌ DOMINIO NO VERIFICADO AÚN\n\n¿Quieres intentar enviar un correo de prueba usando el dominio temporal (onboarding@resend.dev) para validar el diseño ahora mismo?");
+                                                                if (retry) {
+                                                                    await trySend('onboarding@resend.dev');
+                                                                }
+                                                            } else {
+                                                                alert("❌ ERROR: " + errorMsg);
+                                                            }
+                                                            return false;
+                                                        }
+                                                    } catch (err) {
+                                                        alert("❌ ERROR CRÍTICO: " + (err as any).message);
+                                                        return false;
+                                                    }
+                                                };
+                                                await trySend();
+                                            }}
+                                            className="px-3 py-2 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-[8px] font-black uppercase tracking-widest text-emerald-400 hover:text-emerald-300 transition-all text-center"
+                                        >
+                                            Test Email
+                                        </button>
                                     </div>
                                     <div className="max-h-[350px] overflow-y-auto">
                                         {notifications.length === 0 ? (

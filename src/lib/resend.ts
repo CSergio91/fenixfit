@@ -1,23 +1,27 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const resend = new Resend((process.env.RESEND_API_KEY || '').trim());
 
 export async function sendOrderConfirmationEmail({
     email,
     orderNumber,
     customerName,
     totalAmount,
-    items
+    items,
+    fromEmail
 }: {
     email: string;
     orderNumber: string;
     customerName: string;
     totalAmount: number;
     items: any[];
+    fromEmail?: string;
 }) {
     try {
+        console.log('--- ENVIANDO CORREO DE CONFIRMACIÓN ---');
+        console.log('Para:', email);
         const { data, error } = await resend.emails.send({
-            from: 'Fenix Fit <orders@fenixfit.es>',
+            from: fromEmail || 'Fenix Fit <pedidos@fenixfit.es>',
             to: [email],
             subject: `Confirmación de Pedido #${orderNumber} - Fenix Fit`,
             html: `
@@ -41,7 +45,7 @@ export async function sendOrderConfirmationEmail({
                                             ${item.name} (Talla: ${item.size}) x ${item.quantity}
                                         </td>
                                         <td style="padding: 10px 0; border-bottom: 1px solid #eee; text-align: right; font-weight: bold;">
-                                            ${(item.price * item.quantity).toFixed(2)}€
+                                            ${((item.price || item.price_at_time || 0) * item.quantity).toFixed(2)}€
                                         </td>
                                     </tr>
                                 `).join('')}
@@ -89,6 +93,7 @@ export async function sendPromotionalEmail({
     targetUrl?: string;
 }) {
     try {
+        console.log('--- ENVIANDO CORREO PROMOCIONAL ---');
         const { data, error } = await resend.emails.send({
             from: 'Fenix Fit <marketing@fenixfit.es>',
             to: [email],
@@ -147,8 +152,9 @@ export async function sendOrderStatusUpdateEmail({
     const message = statusMessages[newStatus] || `El estado de tu pedido #${orderNumber} ha cambiado a: ${newStatus}`;
 
     try {
+        console.log('--- ENVIANDO ACTUALIZACION DE PEDIDO ---');
         const { data, error } = await resend.emails.send({
-            from: 'Fenix Fit <orders@fenixfit.es>',
+            from: 'Fenix Fit <pedidos@fenixfit.es>',
             to: [email],
             subject: `Actualización de tu pedido #${orderNumber} - Fenix Fit`,
             html: `
@@ -190,8 +196,9 @@ export async function sendNewOrderAdminNotification({
     totalAmount: number;
 }) {
     try {
+        console.log('--- ENVIANDO NOTIFICACION ADM ---');
         await resend.emails.send({
-            from: 'Fenix Fit System <system@fenixfit.es>',
+            from: 'Fenix Fit System <admin@fenixfit.es>',
             to: [adminEmail],
             subject: `🚨 ¡NUEVO PEDIDO RECIBIDO! #${orderNumber}`,
             html: `

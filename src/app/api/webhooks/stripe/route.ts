@@ -118,6 +118,17 @@ export async function POST(req: Request) {
         } catch (adminErr) {
             console.error('Admin Notification Error:', adminErr)
         }
+
+        // 6. Create Real-time App Notification
+        try {
+            await supabase.from('notifications').insert({
+                title: 'NUEVO PEDIDO',
+                message: `Pedido #${order.id.slice(0, 8).toUpperCase()} - ${session.customer_details?.name || 'Cliente'} - ${(session.amount_total || 0) / 100}€`,
+                type: 'order'
+            })
+        } catch (notifErr) {
+            console.error('Real-time Notification Error:', notifErr)
+        }
     }
 
     return NextResponse.json({ received: true });

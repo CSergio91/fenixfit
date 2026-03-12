@@ -34,14 +34,7 @@ export default function OrdersClient({ initialOrders, currency, role }: { initia
     const [confirmingDelete, setConfirmingDelete] = useState<string | null>(null)
     const [dateRange, setDateRange] = useState<'all' | 'today' | 'this_month' | 'last_month'>('all')
 
-    const filteredOrders = orders.filter(o => {
-        const matchesSearch =
-            o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (o.customer_email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-            (o.customer_name || '').toLowerCase().includes(searchQuery.toLowerCase())
-
-        const matchesStatus = statusFilter === 'all' || o.status === statusFilter
-
+    const dateFilteredOrders = orders.filter(o => {
         const orderDate = new Date(o.created_at)
         const now = new Date()
         let matchesDate = true
@@ -54,13 +47,22 @@ export default function OrdersClient({ initialOrders, currency, role }: { initia
             const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
             matchesDate = orderDate.getMonth() === lastMonth.getMonth() && orderDate.getFullYear() === lastMonth.getFullYear()
         }
-
-        return matchesSearch && matchesStatus && matchesDate
+        return matchesDate
     })
 
-    const pendingWaCount = filteredOrders.filter(o => o.status === 'pending_whatsapp').length
-    const confirmedCount = filteredOrders.filter(o => ['confirmed', 'paid'].includes(o.status)).length
-    const totalRevenue = filteredOrders.filter(o => ['confirmed', 'paid', 'shipped'].includes(o.status))
+    const filteredOrders = dateFilteredOrders.filter(o => {
+        const matchesSearch =
+            o.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (o.customer_email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+            (o.customer_name || '').toLowerCase().includes(searchQuery.toLowerCase())
+
+        const matchesStatus = statusFilter === 'all' || o.status === statusFilter
+        return matchesSearch && matchesStatus
+    })
+
+    const pendingWaCount = dateFilteredOrders.filter(o => o.status === 'pending_whatsapp').length
+    const confirmedCount = dateFilteredOrders.filter(o => ['confirmed', 'paid'].includes(o.status)).length
+    const totalRevenue = dateFilteredOrders.filter(o => ['confirmed', 'paid', 'shipped'].includes(o.status))
         .reduce((s, o) => s + Number(o.total_amount || 0), 0)
 
     const handleStatusChange = async (orderId: string, newStatus: string) => {

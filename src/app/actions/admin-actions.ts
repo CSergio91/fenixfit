@@ -180,6 +180,17 @@ export async function confirmWhatsappOrder(orderId: string) {
         console.error('Error saving as customer during confirmation:', e)
     }
 
+    // NEW: Real-time notification for CONFIRMED order
+    try {
+        await supabase.from('notifications').insert({
+            title: 'PEDIDO CONFIRMADO',
+            message: `Pedido #${(order.id as string).slice(0, 8).toUpperCase()} - ${order.customer_name} confirmado.`,
+            type: 'order'
+        })
+    } catch (notifErr) {
+        console.error('Real-time Notification Error:', notifErr)
+    }
+
     revalidatePath('/secret-hq/orders')
     revalidatePath('/secret-hq/products')
     revalidatePath('/secret-hq/dashboard')
@@ -243,6 +254,17 @@ export async function createWhatsappOrder(orderData: {
         }
     } catch (e) {
         console.error('Error sending admin notification:', e)
+    }
+
+    // NEW: Real-time notification for NEW WHATSAPP order
+    try {
+        await supabase.from('notifications').insert({
+            title: 'NUEVO WHATSAPP',
+            message: `Pedido #${order.id.slice(0, 8).toUpperCase()} - ${order.customer_name} - ${order.total_amount}€`,
+            type: 'order'
+        })
+    } catch (notifErr) {
+        console.error('Real-time Notification Error:', notifErr)
     }
 
     revalidatePath('/secret-hq/orders')
@@ -633,6 +655,41 @@ export async function removeStaffMember(email: string) {
     if (error) throw new Error(error.message)
     revalidatePath('/secret-hq/settings')
     return { success: true }
+}
+
+export async function sendTestEmail(targetEmail: string, fromEmail?: string) {
+    const role = await getCurrentUserRole()
+    if (!role) throw new Error('Unauthorized')
+
+    return await sendOrderConfirmationEmail({
+        email: targetEmail,
+        orderNumber: 'TEST-' + Math.random().toString(36).substring(7).toUpperCase(),
+        customerName: 'Test User',
+        totalAmount: 99.99,
+        items: [
+            { name: 'Producto de Prueba', size: 'M', quantity: 1, price_at_time: 99.99 }
+        ],
+        fromEmail
+    })
+}
+
+export async function createTestNotification() {
+    const role = await getCurrentUserRole()
+    if (!role) throw new Error('Unauthorized')
+
+    const supabase = await createAdminClient()
+    const { data, error } = await supabase
+        .from('notifications')
+        .insert({
+            title: 'PRUEBA DE SISTEMA',
+            message: 'Esta es una notificación de prueba para verificar el funcionamiento en tiempo real.',
+            type: 'info'
+        })
+        .select()
+        .single()
+
+    if (error) throw new Error(error.message)
+    return data
 }
 
 
